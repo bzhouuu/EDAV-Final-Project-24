@@ -7,24 +7,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
 
 ```{r}
@@ -57,8 +39,10 @@ We realize that 5% of the artists featured in MOMA determined the majority of th
 ```{r}
 moma_artists_nat_5per <- moma_artists_nationality %>% group_by (Frequency) %>% filter(Frequency > 436)
 
+# filter out na for now
+moma_artists_nat_5per <- moma_artists_nat_5per %>% group_by(Nationality) %>% filter(Nationality %in% c("American","German","French","British","Italian","Japanese"))
+  
 # frequency of nationality
-
 ggplot(moma_artists_nat_5per, aes(fct_reorder(Nationality, Frequency), Frequency)) +
   geom_bar(stat = "identity") +
   ggtitle("MOMA Artist Nationality by Frequency (top 5%)") +
@@ -70,8 +54,12 @@ ggplot(moma_artists_nat_5per, aes(fct_reorder(Nationality, Frequency), Frequency
 ```
 
 ```{r}
-#  if by top 10%
+# if by top 10%
 moma_artists_nat_10per <- moma_artists_nationality %>% group_by (Frequency) %>% filter(Frequency > 173)
+
+# filter out NA for now
+moma_artists_nat_10per <- moma_artists_nationality %>% group_by (Nationality) %>% filter(Nationality %in% c("American", "German","French","British", "Italian","Japanese","Swiss","Dutch","Russian","Austrian","Canadian"))
+
 
 # frequency of nationality
 ggplot(moma_artists_nat_10per, aes(fct_reorder(Nationality, Frequency), Frequency)) +
@@ -178,4 +166,52 @@ ggplot(moma_artists_birth_year_gender_nona, aes(BeginDate, Frequency, fill = Gen
   coord_flip() +
   theme(plot.title = element_text(face = "bold"))
 
+```
+
+```{r}
+# now let's take a look at the artworks
+moma_artworks_class <- moma_artworks[14] %>%group_by(Classification) %>% dplyr::summarize(Frequency=n()) %>% arrange(Frequency)
+
+# check stats
+describe(moma_artworks_class)
+```
+
+```{r}
+# top 5% have more than 29197 frequency
+moma_artworks_class_5per <- moma_artworks_class %>% group_by(Frequency) %>% filter(Frequency>29197)
+
+# frequency of different classifications
+ggplot(moma_artworks_class_5per, aes(fct_reorder(Classification, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA Artwork Classification by Frequency (top 5%)") +
+  xlab("Classification") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# top 10%
+moma_artworks_class_10per <- moma_artworks_class %>% group_by(Frequency) %>% filter(Frequency>13815)
+
+ggplot(moma_artworks_class_10per, aes(fct_reorder(Classification, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA Artwork Classification by Frequency (top 10%)") +
+  xlab("Classification") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# top 50%
+moma_artworks_class_50per <- moma_artworks_class %>% group_by(Frequency) %>% filter(Frequency>789)
+
+ggplot(moma_artworks_class_50per, aes(fct_reorder(Classification, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA Artwork Classification by Frequency (top 50%)") +
+  xlab("Classification") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
 ```
