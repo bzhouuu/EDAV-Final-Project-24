@@ -1,6 +1,8 @@
 ---
 title: "moma-met-cross"
 output: html_document
+  #code_folding: hide
+ # toc: true
 ---
 
 ```{r setup, include=FALSE}
@@ -19,6 +21,7 @@ library(mi)
 library(extracat)
 library(tm)
 library(rapportools)
+library(vcd)
 ```
 
 ```{r}
@@ -31,7 +34,6 @@ myfill <- "#9FC29F"
 # load data from moma and met
 moma_artists <- read_csv("../data/raw/moma/Artists.csv")
 moma_artworks <- read_csv("../data/raw/moma/Artworks.csv")
-
 ```
 
 ```{r}
@@ -105,6 +107,76 @@ visna(moma_clean, sort = 'r')
 ```
 
 Concluded from the graph above, most rows are missing just the EndDate column, which means missing the death year of an artist. Not missing any data is the second most common pattern in this dataset. But surprisingly, missing all of the columns (other than Display Name) is the third most common patterns. Thus, there are quite decent amount of rows that we cannot use (since they are missing four of the columns that we want to look into). We will now proceed to explore the dataset while taken into account of the missing patterns.
+
+```{r}
+## 1.2. missing data from moma artworks dataset
+str(moma_artworks)
+```
+
+We have 138124 observations with 29 variables. But again, some columns are redundant or not significantly meaningful in our case, so we will drop those.
+
+```{r}
+# we chose title, artist, beginDate, endDate, Gender, Date Made, Medium, Classification, Acquisition Year
+artworks_clean <- moma_artworks[c(1,2,5,6,7,8,9,10,14,16)]
+
+# check missing
+colSums(is.na(artworks_clean))
+```
+
+So we almost have missings from all columns other than Classification column. 
+
+```{r}
+# fix NA format
+
+# clean data that are bracked by ()
+artworks_clean$Nationality <- removePunctuation(artworks_clean$Nationality)
+artworks_clean$BeginDate <- removePunctuation(artworks_clean$BeginDate)
+artworks_clean$EndDate <- removePunctuation(artworks_clean$EndDate)
+artworks_clean$Gender <- removePunctuation(artworks_clean$Gender)
+
+# add columns for acquisition year
+artworks_clean <- artworks_clean %>% mutate(YearAcquired = substr(DateAcquired,1,4))
+
+# for clarity, we remove the original column
+artworks_clean <- dplyr::select(artworks_clean,-DateAcquired)
+
+# Nationality and Gender columns have many empty rows so we use *is.empty* from *rapportools*
+artworks_clean$Nationality[is.empty(artworks_clean$Nationality) == TRUE] <- NA
+artworks_clean$Gender[is.empty(artworks_clean$Gender) == TRUE] <- NA
+artworks_clean$Gender <- tolower(artworks_clean$Gender)
+
+# BeginDate and EndDate have many 0 rows to indicate NAs
+artworks_clean$BeginDate[artworks_clean$BeginDate == 0] <- NA
+artworks_clean$EndDate[artworks_clean$EndDate == 0] <- NA
+
+# clean "unknown" in Date column
+artworks_clean$Date[artworks_clean$Date == "unknown"] <- NA
+
+# we use the same mechanism that detect the most number of NAs (increase false negative, but make sure we increase true positive)
+artworks_clean$Title[str_detect(artworks_clean$Title, "unknown") == TRUE] <- NA
+artworks_clean$Artist[str_detect(artworks_clean$Artist, "unknown") == TRUE] <- NA
+artworks_clean$Medium[str_detect(artworks_clean$Medium, "unknown") == TRUE] <- NA
+artworks_clean$Title[str_detect(artworks_clean$Title, "Unknown") == TRUE] <- NA
+artworks_clean$Artist[str_detect(artworks_clean$Artist, "Unknown") == TRUE] <- NA
+artworks_clean$Medium[str_detect(artworks_clean$Medium, "Unknown") == TRUE] <- NA
+artworks_clean$Nationality[str_detect(artworks_clean$Nationality, "Unknown") == TRUE] <- NA
+artworks_clean$Nationality[str_detect(artworks_clean$Nationality, "unknown") == TRUE] <- NA
+artworks_clean$Date[artworks_clean$Date == "n.d."] <- NA
+
+colSums(is.na(artworks_clean))
+```
+
+```{r}
+visna(artworks_clean, sort = "b")
+```
+
+```{r}
+# just to be safe, we group them again.
+date_test <- artworks_clean %>% group_by(Date) %>% dplyr::summarise(Total = dplyr::n()) %>% arrange(Total)
+aqr_test <- artworks_clean %>% group_by(YearAcquired) %>% dplyr::summarise(Total = dplyr::n()) %>% arrange(Total)
+```
+
+From the graph, EndDate is the column with most missing data, followed by Medium, BeginDate and Gender. To our surprise, Year Acquisition and Date Made have much fewer missing rows than other columns. This can point to the fact that when MOMA collected art pieces, they cared more about when the object was made, rather than the biography of the artist himself or herself (such as birth year, death year, gender, or even medium!)
 
 ```{r}
 # First, what is MOMA's preference on Nationality?
@@ -325,6 +397,7 @@ all_us <- moma_clean %>% group_by(Nationality) %>% filter(Nationality == 'Americ
 first_name_all <- as.data.frame(word(all_us$DisplayName,1))
 colnames(first_name_all) <- 'first_name'
 first_name_allc <- first_name_all %>% group_by(first_name) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+#first_name_allc$first_name <- capitalise(first_name_allc$first_name)
 # first name frequency
 ggplot(tail(first_name_allc,10), aes(fct_reorder(first_name, Frequency), Frequency)) +
   geom_bar(stat = "identity") +
@@ -398,4 +471,244 @@ ggplot(tail(first_name_allc_jp,10), aes(fct_reorder(first_name, Frequency), Freq
   geom_col(color = mycolor, fill = myfill) +
   coord_flip() +
   theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# explore moma artworks
+# to be clear though, for the sake of simplicity, we will only focus on artworks that made by single artists; so we drop all works made by multi artists
+
+# Some pieces are done by more than one artist; check how many are there to decide what to do with them
+artworks_single <- artworks_clean %>% mutate(NumberArtists = lengths(strsplit(Artist, ",")))
+artworks_single <- artworks_single %>% mutate(NumberType = cut(NumberArtists, breaks = c(0,1,Inf), labels = c("Single", "Multiple")))
+# art_collab <- moma_artworks %>% group_by(CollabClass) %>% dplyr::summarise(Total = dplyr::n())
+
+artworks_single <- artworks_single %>% group_by(NumberType) %>% filter(NumberType == 'Single')
+
+str(artworks_single)
+```
+
+We have now 130174 observations.
+
+```{r}
+artworks_org <- artworks_single[3] %>% group_by(Nationality) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+describe(artworks_org)
+```
+
+Take last ten.
+
+```{r}
+# exclude NA
+artworks_org <- artworks_org %>% group_by (Nationality) %>% filter(is.na(Nationality) == FALSE)
+  
+# frequency of nationality
+ggplot(tail(artworks_org,10), aes(fct_reorder(Nationality, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA artworks mostly contributed by ", subtitle = "Top 10 highest Nationality, by Frequency") +
+  xlab("Nationality") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+So will some nationality contribute more artworks even though under represented? NO.
+```{r}
+# lets also look at gender
+artworks_gender <- artworks_single %>% group_by(Gender, Nationality) %>% dplyr::summarize(Frequency= dplyr::n()) %>% arrange(Frequency) %>% filter(Nationality %in% c("American", "French", "German","British", "Spanish", "Italian", "Japanese","Swiss","Russian", "Dutch"))
+```
+
+```{r}
+#if exclude NA for now
+artworks_gender <- artworks_gender %>% group_by(Gender) %>% filter(Gender %in% c("female", "male"))
+ggplot(artworks_gender, aes(fct_reorder(Nationality, Frequency), Frequency, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA All Time Favorite Nationality, Colored by Gender (top 5%)") +
+  xlab("Nationality") +
+  scale_fill_brewer(palette= "Oranges")+
+  geom_col(color = mycolor) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+So no.
+
+```{r}
+aqr_freq <- artworks_single %>% group_by(YearAcquired) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+aqr_freq$YearAcquired <- strtoi(aqr_freq$YearAcquired)
+
+ggplot(aqr_freq, aes(YearAcquired, Frequency)) +
+  geom_line(color = "blue") + 
+  ggtitle("MOMA suddenly loved French Artworks around 1970", subtitle= "Acquisition Year Analysis on Nationality Frequency Change") +
+  labs(x = "Year", y = "Frequency") +
+  theme_grey(14) +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+```{r}
+# nationality frequency change over year
+aqr_nationality <- artworks_single %>% group_by(YearAcquired, Nationality) %>% dplyr::summarise(Frequency = dplyr::n())
+
+# exclude NA
+aqr_nationality <- aqr_nationality %>% group_by(Nationality) %>% filter(Nationality %in% c("American", "French", "German","British", "Spanish", "Italian", "Japanese","Swiss","Russian", "Dutch"))
+
+aqr_nationality$YearAcquired <- strtoi(aqr_nationality$YearAcquired)
+
+ggplot(aqr_nationality, aes(YearAcquired, Frequency, color = Nationality)) +
+  geom_line() + 
+  ggtitle("MOMA suddenly loved French Artworks around 1970", subtitle= "Acquisition Year Analysis on Nationality Frequency Change") +
+  labs(x = "Year", y = "Frequency") +
+  theme_grey(14) +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+```{r}
+# 100% stacked bar for collection of what year born
+# mosaic -> female and male
+
+aqr_gender <- artworks_single %>% group_by(YearAcquired, Gender) %>% dplyr::summarise(Frequency = dplyr::n())
+
+# exclude NA
+aqr_gender <- aqr_gender %>% group_by(Gender) %>% filter(Gender %in% c("female", "male"))
+
+aqr_gender$YearAcquired <- strtoi(aqr_gender$YearAcquired)
+
+ggplot(aqr_gender, aes(YearAcquired, Frequency, color = Gender)) +
+  geom_line() + 
+  ggtitle("And those are mostly from Male Artists...", subtitle= "Acquisition Year Analysis on Gender Frequency Change") +
+  labs(x = "Year", y = "Frequency") +
+  theme_grey(14) +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+So the question becomes: who are those artists? A few of them? Or a bunch of them?
+
+The years are 1968 and 1964.
+
+```{r}
+# year around thos
+peak_1970 <- artworks_single %>% group_by(YearAcquired, Nationality, Artist) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+peak_1970 <- peak_1970 %>% group_by(Nationality) %>% filter(Nationality == "French")
+peak_1970 <- peak_1970 %>% group_by(YearAcquired) %>% filter(YearAcquired %in% c("1964", "1968"))
+peak_1970 <- peak_1970 %>% group_by(Frequency) %>% filter(Frequency > 100)
+peak_1970$YearAcquired <- strtoi(peak_1970$YearAcquired)
+
+ggplot(peak_1970, aes(fct_reorder(Artist, Frequency), Frequency)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("What happened in Year 1964 and 1968!?") +
+  labs(x = "Frequency", y = "Artist") +
+  geom_col(color = mycolor, fill = myfill) +
+  facet_wrap(~YearAcquired) +
+  theme_grey(14) +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+
+```
+
+So we see that in year 1964, MOMA acquired artworks from different French artists, but in year 1968, they acquired mostly just from one artists, Eugène Atget.
+
+```{r}
+# in addition, see those peak years for American artworks
+us_artworks <- artworks_single %>% group_by(YearAcquired, Nationality, Artist) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+us_artworks <- us_artworks %>% group_by(Nationality) %>% filter(Nationality == "American")
+us_artworks <- us_artworks %>% group_by(YearAcquired) %>% filter(YearAcquired %in% c("1974", "2008"))
+us_artworks <- us_artworks %>% group_by(Frequency) %>% filter(Frequency > 100)
+peak_1970$YearAcquired <- strtoi(peak_1970$YearAcquired)
+
+ggplot(us_artworks, aes(fct_reorder(Artist, Frequency), Frequency)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("What happened in Year 1964 and 1968!?") +
+  labs(x = "Frequency", y = "Artist") +
+  geom_col(color = mycolor, fill = myfill) +
+  facet_wrap(~YearAcquired) +
+  theme_grey(14) +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+```{r}
+# let's also see the overall artist number
+artworks_artist <- artworks_single %>% group_by(Artist) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+
+# filter out NAs
+artworks_artist <- artworks_artist %>% group_by(Artist) %>% filter(is.na(Artist) == FALSE)
+
+ggplot(tail(artworks_artist, 10), aes(fct_reorder(Artist, Frequency),Frequency)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  ggtitle("Artists that Contributed Most Artworks to MOMA", subtitle = "Top 10 Artists Frequency Bar Chart") +
+  labs(x = "Frequency", y = "Artist") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+```{r}
+# see top classifications
+class_freq <- artworks_single %>% group_by(Classification) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+# see what classification they like and how they change over year on the top 10
+artworks_class <- artworks_single %>% group_by(YearAcquired, Classification) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+artworks_class$YearAcquired <- strtoi(artworks_class$YearAcquired)
+artworks_class <- artworks_class %>% group_by(Classification) %>% filter(Classification %in% c("Print", "Photograph", "Illustrated Book","Drawing","Design", "Architecture","Painting", "Video"))
+
+ggplot(artworks_class, aes(YearAcquired, Frequency, color = Classification)) +
+  geom_line() + 
+  ggtitle("Illustrated Book and Photograph", subtitle= "Acquisition Year Analysis on Gender Frequency Change") +
+  labs(x = "Year", y = "Frequency") +
+  theme_grey(14) +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+```{r}
+# medium frequency
+med_freq <- artworks_single %>% group_by(Medium) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+artworks_med <- artworks_single %>% group_by(YearAcquired, Medium) %>% dplyr::summarise(Frequency = dplyr::n())
+
+# top 10 frequent medium
+artworks_med <- artworks_med %>% group_by(Medium) %>% filter( Medium %in% c("Gelatin silver print", "Lithograph", "Albumen silver print","Pencil on paper","Letterpress", "Etching","Chromogenic color print", "Lithograph, printed in color"))
+
+artworks_med$YearAcquired <- strtoi(artworks_med$YearAcquired)
+
+ggplot(artworks_med, aes(YearAcquired, Frequency, color = Medium)) +
+  geom_line() + 
+  ggtitle("Gelatin Silver Print can be their New Favorite!", subtitle= "Acquisition Year Analysis on Gender Frequency Change") +
+  labs(x = "Year", y = "Frequency") +
+  theme_grey(14) +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+```{r}
+aqr_birth <- artworks_single %>% group_by(YearAcquired,BeginDate) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+aqr_birth$YearAcquired <- strtoi(aqr_birth$YearAcquired)
+
+ggplot(aqr_birth, aes(YearAcquired, Frequency, color = BeginDate)) +
+  geom_line() + 
+  ggtitle("Gelatin Silver Print can be their New Favorite!", subtitle= "Acquisition Year Analysis on Gender Frequency Change") +
+  labs(x = "Year", y = "Frequency") +
+  theme_grey(14) +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+```{r}
+# trying to see if there is pattern of acq of artist birth year
+artworks_mos <- artworks_single[c(3,4,6,9,10)]
+artworks_mos <- artworks_mos %>% mutate(BirthIdx = (BeginDate < 1950))
+artworks_mos$BirthIdx[(artworks_mos$BirthIdx)== TRUE] <- 1
+artworks_mos$BirthIdx[(artworks_mos$BirthIdx)== FALSE] <- 3
+artworks_mos <- artworks_mos %>% mutate(BirthType = cut(BirthIdx, breaks = c(0,1,Inf), labels = c("First Half", "Second Half")))
+artworks_mos <- artworks_mos %>% group_by(Gender, BirthType) %>% dplyr::summarise(Frequency = dplyr::n())
+vcd::mosaic(BirthType ~ Gender, artworks_mos)
 ```
