@@ -31,7 +31,7 @@ myfill <- "#9FC29F"
 # load data from moma and met
 moma_artists <- read_csv("../data/raw/moma/Artists.csv")
 moma_artworks <- read_csv("../data/raw/moma/Artworks.csv")
-#met_artworks <- read_csv("../data/raw/met/MetObjects.csv")
+
 ```
 
 ```{r}
