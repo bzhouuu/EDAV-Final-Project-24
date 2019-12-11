@@ -1,0 +1,401 @@
+---
+title: "moma-met-cross"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#load packages
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(Hmisc)
+library(HH)
+library(mi)
+library(extracat)
+library(tm)
+library(rapportools)
+```
+
+```{r}
+# set color
+mycolor <- "#80593D"
+myfill <- "#9FC29F"
+```
+
+```{r}
+# load data from moma and met
+moma_artists <- read_csv("../data/raw/moma/Artists.csv")
+moma_artworks <- read_csv("../data/raw/moma/Artworks.csv")
+
+```
+
+```{r}
+# 1. Missing data
+# 1.1 MOMA
+# cut out columns that we dont need
+
+str(moma_artists)
+```
+
+This is a dataset describing 15,853 observations with 9 columns. However, we can quickly notice that some columns are either redundant or seemingly meaningless for exploratory analysis, such as ConstituentID, ArtistBio (which is combining Nationality, BeginDate and EndDate), Wiki QID, ULAN; as a result, we will just go ahead and drop them.
+
+```{r}
+# we first explore the artists dataset, we only include: DisplayName, Nationality, Gender, BeginDate, and EndDate
+moma_artists <- moma_artists[c(2,4,5,6,7)]
+
+str(moma_artists)
+```
+
+Now, we just have 5 columns with the same number of observations: Artist Display Name, Nationality, Gender, Artist Birth Year, Artist Death Year. We will proceed to clean up the datasets and observed the patterns in the missing data.
+
+```{r}
+# quick scan
+# We will do a quick scan first:
+colSums(is.na(moma_artists))
+```
+
+From the report, it says that only Nationality and Gender are the columns with missing value. This seems odd as it is nearly impossible for BeginDate (Birth Year) and EndDate (Death Year) to not have any missing data. Thus, we go back and eyeball the dataset. From the process, we realize that the missing values in BeginDate and EndDate columns are denoted as 0 instead NA. That said, we will replace the 0s with NAs.
+
+```{r}
+# clean up BeginDate and EndDate columns
+moma_clean <- moma_artists
+moma_clean$BeginDate[(moma_clean$BeginDate == 0)] <- NA
+moma_clean$EndDate[(moma_clean$EndDate == 0)] <- NA
+
+# now check again
+colSums(is.na(moma_clean))
+```
+
+After the clean up, now the NAs are revealed. There are 3,791 missing data in the column BeginDate and 10,799 missing in the EndDate column. This quite literally suggests that with the artists being featured in MOMA. More than half of them (~68%) are missing death years, and less than one-fourth (~24%) of them are missing birth years. Perhaps, there is difficulty with MOMA to collect full bio of the artists being featured in the museum, especially with the death years of the artists.
+
+```{r}
+# group the other three columns and see if there is any NAs that are not tracked by NA due to human error while entering the data
+
+nationality_na <- moma_clean %>% group_by(Nationality) %>% dplyr::summarise(Total = dplyr::n()) %>% arrange(Total)
+
+gender_na <- moma_clean %>% group_by (Gender) %>% dplyr::summarise(Total = dplyr::n()) %>% arrange(Total)
+
+name_na <- moma_clean %>% group_by(DisplayName) %>% dplyr::summarise(Total = dplyr::n()) %>% arrange(Total)
+
+# by manually search "unknown" and related keywords in the dataset, we caught on error: NAs in Nationality are also denoted as "nationality unknown"
+moma_clean$Nationality[moma_clean$Nationality == "Nationality unknown"] <- NA
+
+# Similarly, with the Name column, there are also some bad format NAs
+moma_clean$DisplayName <- tolower(moma_clean$DisplayName)
+moma_clean$DisplayName[str_detect(moma_clean$DisplayName, "unknown") == TRUE] <- NA
+
+# with the gender column, we noticed that the biggest problem is with lowercase and upper case; also, since there is only 1 data observation on binary gender, we might consider dropping it later
+moma_clean$Gender <- tolower(moma_clean$Gender)
+
+colSums(is.na(moma_clean))
+```
+
+We also checked the other three columns, Display Name, Nationality, and Gender, in case there are some human errors (such as entering the data in the wrong format) that might lead to NAs not being tracked by correctly. In fact, there were some for the Display Name and Nationality columns. Nas in the Display column are denoted with characters spelling out in words. Similarly, NAs in the Nationality column are also denoted in words. After cleaning them up, we uncovered 53 NAs in the Display Name column, 180 NAs in the Nationality column and above is the result of complete missing data values in this dataset. For the Gender column, no NAs are uncovered, but there is upper case and lower case issue such as "male" and "Male", so we just turn all the gender types to lower case.
+
+The result above is the total sum of all the missing data in this dataset. We will plot a graph to better understand the missing patterns.
+
+```{r}
+# plot missing patterns
+visna(moma_clean, sort = 'r')
+```
+
+Concluded from the graph above, most rows are missing just the EndDate column, which means missing the death year of an artist. Not missing any data is the second most common pattern in this dataset. But surprisingly, missing all of the columns (other than Display Name) is the third most common patterns. Thus, there are quite decent amount of rows that we cannot use (since they are missing four of the columns that we want to look into). We will now proceed to explore the dataset while taken into account of the missing patterns.
+
+```{r}
+# First, what is MOMA's preference on Nationality?
+moma_org <- moma_clean[2] %>% group_by(Nationality) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency) 
+
+# check the stats
+describe(moma_org)
+```
+
+Of the 15,853 observations (including NAs), 95% of the data are less than the frequency of the top 5% of the nationalities, where the cut off is only 446 counts. Thus, we are definitely seeing a long-tail effect, that of the 15,853 observations, most of them are from the same countries on the top 5% list. 
+
+
+```{r}
+# take the top 5% that can represent the nationality column
+moma_org5 <- moma_org %>% group_by (Frequency) %>% filter(Frequency > 446)
+
+# filter out na for now
+moma_org5 <- moma_org5 %>% group_by(Nationality) %>% filter(is.na(Nationality) == FALSE)
+  
+# frequency of nationality
+ggplot(moma_org5, aes(fct_reorder(Nationality, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA All Time Favorite Nationality", subtitle = "Top 5% Frequency of Nationality") +
+  xlab("Nationality") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+We observed that the number of American artists is nearly 5 times the number of artists from other countries (5472 counts), which means one-third of the artists featured by MOMA are from the U.S..
+
+```{r}
+# if by top 10%, which is 165
+moma_org10 <- moma_org %>% group_by (Frequency) %>% filter(Frequency > 165)
+# filter out NA for now
+moma_org10 <- moma_org10 %>% group_by (Nationality) %>% filter(is.na(Nationality)== FALSE)
+# frequency of nationality
+ggplot(moma_org10, aes(fct_reorder(Nationality, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA Artist Nationality by Frequency (top 10%)") +
+  xlab("Nationality") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+Thus, we observed that among the 90% of the artworks collected by MOMA (which are 12 countries), 8 are European countries, 2 are North American countries, 1 is South American and 1 is Asian.
+
+```{r}
+# Now, let's check by gender of those top 5%
+moma_org5_gender <- moma_clean %>% group_by(Gender, Nationality) %>% dplyr::summarize(Frequency= dplyr::n()) %>% arrange(Frequency) %>% filter(Nationality %in% c("American", "British", "German", "Italian", "Japanese"))
+```
+
+```{r}
+#if exclude NA for now
+moma_org5_gender <- moma_org5_gender %>% group_by(Gender) %>% filter(Gender %in% c("female", "male"))
+ggplot(moma_org5_gender, aes(Nationality, Frequency, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA All Time Favorite Nationality, Colored by Gender (top 5%)") +
+  xlab("Nationality") +
+  scale_fill_brewer(palette= "Oranges")+
+  geom_col(color = mycolor) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# dplyr::ext, we look at Birth Year
+moma_birthy <- moma_clean[4] %>% group_by (BeginDate) %>% dplyr::summarize(Frequency= dplyr::n()) %>% arrange(Frequency)
+moma_birthy$BeginDate <- as.character(moma_birthy$BeginDate)
+# again, check the stats
+describe(moma_birthy)
+```
+
+Again, we take the 95% percentile, and see a similar result, that 95% of the birth years are fewer than 153 counts, which means most of the artists are from similar or identical birh years, which is quite surprising.
+
+```{r}
+# let's see the top 5%
+moma_birthy5 <- moma_birthy %>% group_by(Frequency) %>% filter(Frequency > 153)
+# and exclude NA for now
+moma_birthy5 <- moma_birthy5 %>% group_by(BeginDate) %>% filter(is.na(BeginDate) == FALSE)
+# frequency of birth year
+ggplot(moma_birthy5, aes(BeginDate, Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA Artist Birth Year by Frequency (top 5%)") +
+  xlab("Birth Year") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+We observed that these ten consequentive years (excluding 1945) accounts for the birth year of the artists that are most recognized by MOMA. Perhaps, these ten years really made artists creative :)
+
+```{r}
+# let's see the top 10%, which is greater than 138
+moma_birthy10 <- moma_birthy %>% group_by(Frequency) %>% filter(Frequency > 138)
+# and exclude NA for now
+moma_birthy10 <- moma_birthy10 %>% group_by(BeginDate) %>% filter(is.na(BeginDate) == FALSE)
+# frequency of birth year
+ggplot(moma_birthy10, aes(BeginDate, Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA Artist Birth Year by Frequency (top 10%)") +
+  xlab("Birth Year") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+Different from Nationality though, birth year is in fact a range of years with similar frequencies. For sake of simplicity, we take the years starting from (whatever years we decide)
+
+```{r}
+# we plot by gender
+moma_birthy5_gender <- moma_clean %>% group_by(Gender, BeginDate) %>% dplyr::summarize(Frequency=dplyr::n())
+# just check the top 5%
+moma_birthy5_gender$BeginDate <- factor(moma_birthy5_gender$BeginDate, levels = moma_birthy5$BeginDate)
+# take out NAs
+moma_birthy5_gender <- moma_birthy5_gender %>% group_by(BeginDate) %>% filter( !is.na(BeginDate))
+moma_birthy5_gender <- moma_birthy5_gender %>% group_by(Gender) %>% filter(Gender %in% c("female", "male"))
+# plot it
+ggplot(moma_birthy5_gender, aes(BeginDate, Frequency, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA Artist Birth Year by Frequency, Colored by Gender (top 5%)") +
+  xlab("Birth Year") +
+  scale_fill_brewer(palette= "Oranges")+
+  geom_col(color = mycolor) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+
+```{r}
+# if plot on time series
+moma_birthy_gen_time <- moma_clean %>% group_by(Gender, BeginDate) %>% dplyr::summarize(Frequency=dplyr::n())
+
+moma_birthy_gen_time$BeginDate <- strtoi(moma_birthy_gen_time$BeginDate)
+
+# remove NAs
+moma_birthy_gen_time <- moma_birthy_gen_time %>% group_by(Gender) %>% filter(Gender %in% c("female", "male"))
+moma_birthy_gen_time <- moma_birthy_gen_time %>% group_by(BeginDate) %>% filter(BeginDate >= 1900)
+
+ggplot(moma_birthy_gen_time, aes(BeginDate, Frequency, color = Gender)) +
+  geom_line() + 
+  ggtitle("MOMA Female-Male Birth Year Comparison") +
+  theme_grey(14) +
+  theme(legend.title = element_blank()) +
+  labs(x = "Year", y = "Frequency")
+```
+
+```{r}
+# calculate female-male ratio
+moma_birthy_gen_ratio <- moma_clean
+moma_birthy_gen_ratio <- moma_birthy_gen_ratio %>% group_by(Gender) %>% filter(Gender %in% c("female", "male"))
+moma_birthy_gen_ratio <- moma_birthy_gen_ratio%>% group_by(BeginDate, Gender) %>% dplyr::summarise(Frequency = dplyr::n())
+moma_birthy_gen_ratio <- moma_birthy_gen_ratio %>% group_by(BeginDate) %>% filter(BeginDate >= 1900 & BeginDate <= 1980)
+
+moma_birthy_gen_ratio <- moma_birthy_gen_ratio %>% group_by(BeginDate) %>% dplyr::mutate(Ratio = 100*Frequency[Gender=="female"]/Frequency[Gender == "male"])
+
+# plot on ratio
+ggplot(moma_birthy_gen_ratio, aes(BeginDate, Ratio)) +
+  geom_line(color = "blue") + 
+  ggtitle("Gender Ratio Peaked at Year 1971 (62%)!", subtitle = "Timeseries Graph on Birth Year Female-Male Ratio (1900 - 1980)") +
+  labs(x = "Year", y = "Ratio (%)") +
+  theme_grey(14) +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+
+```
+
+```{r}
+# Name analysis
+moma_artist_name <- moma_clean %>% group_by(BeginDate) %>% filter(BeginDate >= 1937 & BeginDate <= 1947)
+
+# Capitalized for visualization
+moma_artist_name$DisplayName <- capitalize(moma_artist_name$DisplayName)
+
+# 1.4.1 On Nationality
+# first, a high level pic
+# moma_artists_sub_org <- moma_artists_sub %>% group_by(Nationality) %>% dplyr::summarize(Frequency = dplyr::n()) %>% arrange(Frequency)
+# NA only takes a small proportion, so we exclude it
+# moma_artists_sub_org <- moma_artists_sub_org %>% group_by(Nationality) %>% filter(is.na(Nationality) == FALSE)
+```
+They collected a lot from American artists. But who are they? Can we tell?
+
+```{r}
+
+moma_artists_sub_us <- moma_artist_name %>% group_by(Nationality) %>% filter(Nationality == 'American')
+first_name_us <- as.data.frame(word(moma_artists_sub_us$DisplayName,1))
+colnames(first_name_us) <- 'first_name'
+first_name_count <- first_name_us %>% group_by(first_name) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+# first name frequency
+ggplot(tail(first_name_count,10), aes(fct_reorder(first_name, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA's Favorite American First Names, by Frequency, 1937 - 1947") +
+  xlab("First Name") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# let's check last name
+last_name_us <- as.data.frame(word(moma_artists_sub_us$DisplayName,-1))
+colnames(last_name_us) <- 'last_name'
+last_name_count <- last_name_us %>% group_by(last_name) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+# first name frequency
+ggplot(tail(last_name_count,10), aes(fct_reorder(last_name, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA's Favorite American Last Names, by Frequency, 1937 - 1947") +
+  xlab("Last Name") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# if all
+all_us <- moma_clean %>% group_by(Nationality) %>% filter(Nationality == 'American')
+first_name_all <- as.data.frame(word(all_us$DisplayName,1))
+colnames(first_name_all) <- 'first_name'
+first_name_allc <- first_name_all %>% group_by(first_name) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+# first name frequency
+ggplot(tail(first_name_allc,10), aes(fct_reorder(first_name, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA's All Time Favorite American First Names, by Frequency") +
+  xlab("First Name") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# if all
+all_de <- moma_artists %>% group_by(Nationality) %>% filter(Nationality == 'German')
+first_name_all_de <- as.data.frame(word(all_de$DisplayName,1))
+colnames(first_name_all_de) <- 'first_name'
+first_name_allc_de <- first_name_all_de %>% group_by(first_name) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+#first_name_allc_de$first_name <- capitalize(first_name_allc_de$first_name)
+# first name frequency
+ggplot(tail(first_name_allc_de,10), aes(fct_reorder(first_name, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA's All Time Favorite German First Names, by Frequency") +
+  xlab("First Name") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# if all
+all_fr <- moma_artists %>% group_by(Nationality) %>% filter(Nationality == 'French')
+first_name_all_fr <- as.data.frame(word(all_fr$DisplayName,1))
+colnames(first_name_all_fr) <- 'first_name'
+first_name_allc_fr <- first_name_all_fr %>% group_by(first_name) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+# first name frequency
+ggplot(tail(first_name_allc_fr,10), aes(fct_reorder(first_name, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA's All Time Favorite French First Names, by Frequency") +
+  xlab("First Name") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# if all
+all_uk <- moma_artists %>% group_by(Nationality) %>% filter(Nationality == 'British')
+first_name_all_uk <- as.data.frame(word(all_uk$DisplayName,1))
+colnames(first_name_all_uk) <- 'first_name'
+first_name_allc_uk <- first_name_all_uk %>% group_by(first_name) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+# first name frequency
+ggplot(tail(first_name_allc_uk,10), aes(fct_reorder(first_name, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA's All Time Favorite British First Names, by Frequency") +
+  xlab("First Name") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# if all
+all_jp <- moma_artists %>% group_by(Nationality) %>% filter(Nationality == 'Japanese')
+first_name_all_jp <- as.data.frame(word(all_jp$DisplayName,1))
+colnames(first_name_all_jp) <- 'first_name'
+first_name_allc_jp <- first_name_all_jp %>% group_by(first_name) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+# first name frequency
+ggplot(tail(first_name_allc_jp,10), aes(fct_reorder(first_name, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MOMA's All Time Favorite Japanese First Names, by Frequency") +
+  xlab("First Name") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold"))
+```
