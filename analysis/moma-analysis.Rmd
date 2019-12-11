@@ -1,0 +1,290 @@
+---
+title: "moma-analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+#load packages
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(Hmisc)
+library(HH)
+library(mi)
+library(extracat)
+library(tm)
+library(rapportools)
+```
+
+```{r}
+# set color
+mycolor <- "#80593D"
+myfill <- "#9FC29F"
+```
+
+```{r}
+# load data
+moma_artists <- read_csv("../data/moma/Artists.csv")
+moma_artworks <- read_csv("../data/moma/Artworks.csv")
+```
+
+Data sources:
+This dataset (containing *Artists.csv* and *Artworks.csv*) are downloaded online from the MOMA github page (link). 
+
+```{r}
+# cut out columns that we dont need
+
+# for artists dataset we dont need: ID, ArtistBio, WikiQJD and ULAN
+moma_artists <- moma_artists[c(2,4,5,6,7)]
+
+# for artworks, we only need: Title, Aritst, Nationality, BeginDate, EndDate, Gender, Date, Medium, Classfication and Date Acquired
+moma_artworks <- moma_artworks[c(1,2,5,6,7,8,9,10,14,16)]
+
+# clean data that are bracked by ()
+moma_artworks$Nationality <- removePunctuation(moma_artworks$Nationality)
+moma_artworks$BeginDate <- removePunctuation(moma_artworks$BeginDate)
+moma_artworks$EndDate <- removePunctuation(moma_artworks$EndDate)
+moma_artworks$Gender <- removePunctuation(moma_artworks$Gender)
+
+# add a column for artworks to indicate acquisition year
+moma_artworks <- moma_artworks %>% mutate(YearAcquired = substr(DateAcquired,1,4))
+
+# for clarity, we remove the original column
+moma_artworks <- dplyr::select(moma_artworks,-DateAcquired)
+
+# check NAs
+# first, turn missing columns to NA
+# Nationality and Gender columns have many empty rows so we use *is.empty* from *rapportools*
+moma_artworks$Nationality[is.empty(moma_artworks$Nationality) == TRUE] <- NA
+moma_artworks$Gender[is.empty(moma_artworks$Gender) == TRUE] <- NA
+
+# BeginDate and EndDate have many 0 columns to indicate NAs
+moma_artworks$BeginDate[moma_artworks$BeginDate == 0] <- NA
+moma_artworks$EndDate[moma_artworks$EndDate == 0] <- NA
+```
+
+```{r}
+
+# Some pieces are done by more than one artist; check how many are there to decide what to do with them
+moma_artworks <- moma_artworks %>% mutate(NumberArtists = lengths(strsplit(Artist, ",")))
+moma_artworks <- moma_artworks %>% mutate(CollabClass = cut(NumberArtists, breaks = c(0,1,Inf), labels = c("Single", "Multiple")))
+art_collab <- moma_artworks %>% group_by(CollabClass) %>% dplyr::summarise(Total = dplyr::n())
+
+# plot it
+ggplot(art_collab, aes(CollabClass, Total)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Single Piece Number of Artists Comparison") +
+  xlab("Number of Artists") +
+  geom_col(color = mycolor, fill = myfill) +
+  #scale_y_manual1) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+From the data cleaning, we observed that about 6.25% of the pieces collected by MOMA are done by more than one artist. Thus, to make an analysis on the dataset, we will be only focusing on pieces done by single artist, and drop those rows with multiple artists.
+
+```{r}
+# drop if multiple
+moma_artworks <- moma_artworks %>% group_by(CollabClass) %>% filter(CollabClass == 'Single')
+
+dim(moma_artworks)
+```
+
+```{r}
+# now, let's check NAs
+colSums(is.na(moma_artworks))
+```
+
+To notice here, among the 129,990 observations, 8979 of them are missing artists birth date.
+
+```{r}
+# since we are focusing on the artist age when the piece is created, we will also go ahead and drop those rows
+# and since we are starting to work toward the age product, we will create a new dataset to work with it
+artist_age <- moma_artworks %>% group_by(BeginDate) %>% filter(is.na(BeginDate) == FALSE)
+dim(artist_age)
+```
+
+```{r}
+# next, to calculate artist age, we need to work with the object created date, which is column 7
+# column 7 is relatively messy, it has single value, range value, and "unknown" character to denote NAs
+# we first clean up all the NAs
+artist_age$Date[artist_age$Date == "Unknown"] <- NA
+artist_age$Date[artist_age$Date == "n.d."] <- NA
+
+# now, check again the NAs
+colSums(is.na(artist_age))
+```
+
+From the result, 2,122 rows are missing object created date, which is a small portion of the overall rows (2122/121,011); thus, we will go ahead and remove them as they will not contribute to our calculation of ages.
+
+```{r}
+# remove missing NAs for date column
+artist_age <- artist_age %>% group_by(Date) %>% filter(is.na(Date) == FALSE)
+dim(artist_age)
+```
+
+```{r}
+colSums(is.na(artist_age))
+```
+
+```{r}
+# calculate exact years to measure percent off
+artist_age <- artist_age %>% mutate(YearLength = str_length(Date))
+artist_age <- artist_age %>% mutate(YearType = cut(YearLength, breaks = c(0,4,Inf), labels = c("Exact","Range")))
+year_type <- artist_age %>% group_by(YearType) %>% dplyr::summarise(Total = dplyr::n())
+```
+
+Thus, if we use the method to take first four digits. We will have 33% of the ages calculated being not precise (with potential error).
+
+```{r}
+# to calculate age, we need to first extract out the object created year; since it is a messy column with different formats, we will extract the first four numbers to control consistency. However, with this method, we do can easily encounter problems like: what about years that are in a range? But let's see what ages we get out of the dataset.
+
+artist_age <- artist_age %>% dplyr::rowwise() %>% mutate(YearCreated = str_extract(Date, "[0-9][0-9][0-9][0-9]"))
+                                                         
+# artist_age <- artist_age %>% dplyr::rowwise() %>% mutate(YearCreated = strtoi(str_extract(artist_age$Date, "\\d{4}")))
+colSums(is.na(artist_age))
+```
+
+We noticed that there are 171 NAs.
+
+```{r}
+# we take a look specifically at those NAs and see if they are true NAs
+test <- artist_age %>% group_by(YearCreated) %>% filter(is.na(YearCreated) == TRUE)
+```
+
+After a look, they are true NAs. So we can go ahead and drop them.
+
+```{r}
+# drop NAs
+artist_age <- artist_age %>% group_by(YearCreated) %>% filter(is.na(YearCreated) == FALSE)
+
+# calculate age
+artist_age$BeginDate <- strtoi(artist_age$BeginDate)
+artist_age$YearCreated <- strtoi(artist_age$YearCreated)
+artist_age <- artist_age %>% mutate(Age = (YearCreated - BeginDate))
+
+# we decided to also include classification, medium and gender to have a sense of the age
+age_total <- artist_age %>% group_by(BeginDate,Medium,Gender,Age) %>% dplyr::summarise(Frequency = dplyr::n())
+```
+
+We realized that by this approach, some errors occurred that potentially due to the nature of some type of artworks, such as illustration books that are very likely to be created after an artist passed away. So we first look at what classifications there can be.
+
+```{r}
+# plot it
+ggplot(age_total, aes(Age, Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Single Piece Number of Artists Comparison") +
+  xlab("Number of Artists") +
+  geom_col(color = mycolor, fill = myfill) +
+  facet_wrap(~Classification)
+  theme(plot.title = element_text(face = "bold"))
+```
+
+We will take out Architecture, Design, Drawing, Illustrated Book, Painting, Photograph, Print, Sculpture, Video for closer analysis.
+
+```{r}
+artist_class <- artist_age[c(9,16)] %>% group_by (Classification) %>% filter(Classification %in% c("Architecture", "Design", "Drawing", "Illustrated Book", "Painting", "Photograph", "Print", "Sculpture", "Video"))
+
+artist_class$Classification <- factor(artist_class$Classification)
+
+ggplot(artist_class, aes(x = Classification, y = Age)) + 
+  geom_boxplot() +
+  ggtitle("Age Boxplots by Classification") +
+  labs(x = "Classification", y = "Age") + 
+  theme_grey(16)
+
+```
+
+```{r}
+# lets group age by frequency and see overall trend
+age_total_test <- artist_age %>% group_by(Artist,BeginDate,Date,Age) %>% dplyr::summarise(Frequency = dplyr::n())
+
+age_clean <- artist_class %>% group_by(Age) %>% filter(Age >= 15 & Age <= 70)
+
+# plot again
+ggplot(age_clean, aes(x = Classification, y = Age)) + 
+  geom_boxplot() +
+  ggtitle("MOMA Preferred Age to Create Art", subtitle = "Boxplots of ages when pieces are created, by Classification") +
+  labs(x = "Classification", y = "Age") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+```{r}
+video_test <- artist_age %>% group_by(Classification, Title, BeginDate,Date,Age) %>% dplyr::summarise(Frequency = dplyr::n())
+video_test <- video_test %>% group_by(Classification) %>% filter(Classification == 'Video')
+```
+
+```{r}
+# combined age boxplot
+ggplot(age_clean, aes(y=Age))+
+  geom_boxplot() 
+
+```
+
+```{r}
+# plot it
+ggplot(age_total, aes(Age, Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Single Piece Number of Artists Comparison") +
+  xlab("Number of Artists") +
+  geom_col(color = mycolor, fill = myfill) +
+  facet_wrap(~Gender)
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# better boxplot will give us better result in terms of the outliers so we can better catch errors in our data cleaning process
+
+box_test <- artist_age %>% factor(artist_age$Classification)
+ggplot(artist_age, aes(x = Age, y = Classification)) + 
+  geom_boxplot(fill = myfill, color = mycolor) +
+  ggtitle("Age Boxplots by Classification") +
+  labs(x = "Classification", y = "Age") + 
+  theme_grey(16)
+```
+
+
+We realized that gender column is not well cleaned up with the NAs. So we will take care of them now.
+
+```{r}
+# to lowercase
+age_total$Gender <- tolower(age_total$Gender)
+
+# for eeasiness, we drop Non-binary part.
+age_total <- age_total %>% group_by(Gender) %>% filter(Gender != 'nonbinary')
+
+# plot again
+ggplot(age_total, aes(Age, Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Single Piece Number of Artists Comparison") +
+  xlab("Number of Artists") +
+  geom_col(color = mycolor, fill = myfill) +
+  facet_wrap(~Gender) +
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+# check by classification to decide how we want to cut down our data
+classification <- moma_artworks %>% group_by(Classification) %>% dplyr::summarise(Frequency= dplyr::n()) %>% arrange(Frequency)
+
+# plot it
+ggplot(tail(classification), aes(Classification, Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Single Piece Number of Artists Comparison") +
+  xlab("Number of Artists") +
+  geom_col(color = mycolor, fill = myfill) +
+  #facet_wrap(~classification)
+  theme(plot.title = element_text(face = "bold"))
+```
+
+```{r}
+
+```
