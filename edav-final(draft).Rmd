@@ -7,9 +7,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
-
-```{r}
+```{r message=FALSE, warning=FALSE}
 library(tidyverse)
 library(dplyr)
 library(ggplot2)
@@ -17,18 +15,23 @@ library(forcats)
 library(Hmisc)
 library(HH)
 library(mi)
+# devtools::install_github('CRAN/extracat')
 library(extracat)
+```
 
+```{r}
+# load data
+moma_artists <- read_csv("./data/raw/moma/Artists.csv")
+moma_artworks <- read_csv("./data/raw/moma/Artworks.csv")
+met <- read_csv("./data/raw/met/MetObjects.csv")
+tate_artist <- read_csv("./data/raw/tate/artist_data.csv")
+tate_artwork <- read_csv("./data/raw/tate/artwork_data.csv")
+```
+
+```{r}
 # set color
 mycolor <- "#80593D"
 myfill <- "#9FC29F"
-
-# load data
-moma_artists <- read_csv("./data/Artists.csv")
-moma_artworks <- read_csv("./data/Artworks.csv")
-met <- read_csv("./data/MetObjects.csv")
-tate_artworks <- read_csv("./data/tate_artwork.csv")
-tate_artists <- read_csv("./data/tate_artist.csv")
 
 # 1. we start with MOMA
 # after a closer look at the dataset, 
@@ -205,7 +208,7 @@ moma_artists_org10$region[moma_artists_org10$region == 'Canadian'] <- 'canada'
 moma_artists_org10$region[moma_artists_org10$region == 'Brazilian'] <- 'brazil'
 
 # plot
-moma_artists_org10(admin1.map)
+# moma_artists_org10(admin1.map)
 
 ```
 
@@ -422,7 +425,7 @@ ggplot(moma_artists_sub_by, aes(BeginDate, Frequency)) +
 ```{r}
 # Now, let's check by gender of those top 5%
 moma_artists$Gender <- tolower(moma_artists$Gender)
-moma_artists_gender <- moma_artists[3:4] %>% group_by(Gender, Nationality) %>% dplyr::summarize(Frequency=n()) %>% arrange(Frequency) %>% filter(Nationality %in% c("American", "British", "German", "Italian", "Japanese"))
+moma_artists_gender <- moma_artists %>% group_by(Gender, Nationality) %>% dplyr::summarize(Frequency=n()) %>% arrange(Frequency) %>% filter(Nationality %in% c("American", "British", "German", "Italian", "Japanese"))
 
 ```
 
@@ -430,7 +433,6 @@ moma_artists_gender <- moma_artists[3:4] %>% group_by(Gender, Nationality) %>% d
 
 #if exclude NA for now
 moma_artists_gender_nona <- moma_artists_gender %>% group_by(Gender) %>% filter(Gender %in% c("female", "male"))
-w
 ggplot(moma_artists_gender_nona, aes(Nationality, Frequency, fill = Gender)) +
   geom_bar(stat = "identity") +
   ggtitle("MOMA Artist Nationality by Frequency, Colored by Gender (top 5%)") +
@@ -444,10 +446,10 @@ ggplot(moma_artists_gender_nona, aes(Nationality, Frequency, fill = Gender)) +
 
 ```{r}
 # similarily, for birth year
-moma_artists_birth_year_gender <- moma_artists[4:5] %>% group_by(Gender, BeginDate) %>% dplyr::summarize(Frequency=n())
+moma_artists_birth_year_gender <- moma_artists %>% group_by(Gender, BeginDate) %>% dplyr::summarize(Frequency=n())
 
 # just check the top 5%
-moma_artists_birth_year_gender$BeginDate <- factor(moma_artists_birth_year_gender$BeginDate, levels = moma_artists_birth_year_5per$BeginDate)
+moma_artists_birth_year_gender$BeginDate <- factor(moma_artists_birth_year_gender$BeginDate, levels = moma_artists_by5$BeginDate)
 
 # take out NAs
 moma_artists_birth_year_gender <- moma_artists_birth_year_gender %>% group_by(BeginDate) %>% filter( !is.na(BeginDate))
@@ -560,7 +562,7 @@ colnames(test)[1] <- "acq_yr"
 # now get from tate (artist, year, acq year)
 tate_real <- tate_artwork[c(3,10, 11)]
 
-tate_test <- tate %>% group_by(acquisitionYear) %>% dplyr::summarise(Freq = n()) %>% arrange(Freq)
+tate_test <- tate_real %>% group_by(acquisitionYear) %>% dplyr::summarise(Freq = n()) %>% arrange(Freq)
 tate_test$acquisitionYear <- strtoi(tate_test$acquisitionYear)
 colnames(tate_test)[1] <- "acq_yr"
 
@@ -631,13 +633,13 @@ tate_real_yr <- tate_real_yr %>% group_by(acquisitionYear, artist) %>% dplyr::su
 df_comp <- c(sum(moma_artist_yr$Total), sum(tate_real_yr$Total))
 
 # frequency of nationality
-ggplot(df_comp, aes(fct_reorder(x, Frequency), Frequency)) +
-  geom_bar(stat = "identity") +
-  ggtitle("MOMA Artist Nationality by Frequency (top 5%)") +
-  xlab("Nationality") +
-  geom_col(color = mycolor, fill = myfill) +
-  coord_flip() +
-  theme(plot.title = element_text(face = "bold"))
+# ggplot(df_comp, aes(fct_reorder(x, Frequency), Frequency)) +
+#   geom_bar(stat = "identity") +
+#   ggtitle("MOMA Artist Nationality by Frequency (top 5%)") +
+#   xlab("Nationality") +
+#   geom_col(color = mycolor, fill = myfill) +
+#   coord_flip() +
+#   theme(plot.title = element_text(face = "bold"))
 
 
 ```
@@ -656,7 +658,7 @@ tate_real_yr3 <- tate_real_yr3 %>% group_by(acquisitionYear, artist) %>% dplyr::
 ```
 
 ```{r}
-tate_med <- tate[c(8,11)] 
+tate_med <- tate_artwork[c(8,11)] 
 tate_med <- tate_med %>% group_by(acquisitionYear, medium) %>% dplyr::summarize(Total = n()) %>% arrange(Total)
 
 # get medium from year 1973 - 1976
