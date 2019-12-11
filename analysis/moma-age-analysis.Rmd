@@ -1,5 +1,5 @@
 ---
-title: "moma-analysis"
+title: "moma-age-analysis"
 output: html_document
 ---
 
@@ -244,7 +244,7 @@ ggplot(age_total, aes(Age, Frequency)) +
 # better boxplot will give us better result in terms of the outliers so we can better catch errors in our data cleaning process
 
 box_test <- artist_age %>% factor(artist_age$Classification)
-ggplot(artist_age, aes(x = Age, y = Classification)) + 
+ggplot(artist_age, aes(x = Classification, y = Age)) + 
   geom_boxplot(fill = myfill, color = mycolor) +
   ggtitle("Age Boxplots by Classification") +
   labs(x = "Classification", y = "Age") + 
@@ -272,6 +272,22 @@ ggplot(age_total, aes(Age, Frequency)) +
 ```
 
 ```{r}
+
+# manually drop rows as before
+age_gender <- age_total %>% group_by(Age) %>% filter(Age >= 15 & Age <= 70)
+
+# plot boxplots for gender
+ggplot(age_gender, aes(x = Gender, y = Age)) + 
+  geom_boxplot() +
+  ggtitle("MOMA Preferred Age to Create Art (15 - 70 yrs Old)", subtitle = "Boxplots of ages when pieces are created, by Gender") +
+  labs(x = "Gender", y = "Age") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+
+```{r}
 # check by classification to decide how we want to cut down our data
 classification <- moma_artworks %>% group_by(Classification) %>% dplyr::summarise(Frequency= dplyr::n()) %>% arrange(Frequency)
 
@@ -286,5 +302,5 @@ ggplot(tail(classification), aes(Classification, Frequency)) +
 ```
 
 ```{r}
-
+# 2. Preference 
 ```
