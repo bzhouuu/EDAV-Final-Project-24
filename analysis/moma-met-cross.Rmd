@@ -1,11 +1,10 @@
 ---
 title: "moma-met-cross"
 output: html_document
-<<<<<<< HEAD
+
   #code_folding: hide
  # toc: true
-=======
->>>>>>> eb16bf4fb51a30361edad37afdb9f559dd4b1550
+
 ---
 
 ```{r setup, include=FALSE}
@@ -24,10 +23,8 @@ library(mi)
 library(extracat)
 library(tm)
 library(rapportools)
-<<<<<<< HEAD
+
 library(vcd)
-=======
->>>>>>> eb16bf4fb51a30361edad37afdb9f559dd4b1550
 ```
 
 ```{r}
@@ -40,10 +37,6 @@ myfill <- "#9FC29F"
 # load data from moma and met
 moma_artists <- read_csv("../data/raw/moma/Artists.csv")
 moma_artworks <- read_csv("../data/raw/moma/Artworks.csv")
-<<<<<<< HEAD
-=======
-
->>>>>>> eb16bf4fb51a30361edad37afdb9f559dd4b1550
 ```
 
 ```{r}
@@ -119,7 +112,6 @@ visna(moma_clean, sort = 'r')
 Concluded from the graph above, most rows are missing just the EndDate column, which means missing the death year of an artist. Not missing any data is the second most common pattern in this dataset. But surprisingly, missing all of the columns (other than Display Name) is the third most common patterns. Thus, there are quite decent amount of rows that we cannot use (since they are missing four of the columns that we want to look into). We will now proceed to explore the dataset while taken into account of the missing patterns.
 
 ```{r}
-<<<<<<< HEAD
 ## 1.2. missing data from moma artworks dataset
 str(moma_artworks)
 ```
@@ -190,8 +182,6 @@ aqr_test <- artworks_clean %>% group_by(YearAcquired) %>% dplyr::summarise(Total
 From the graph, EndDate is the column with most missing data, followed by Medium, BeginDate and Gender. To our surprise, Year Acquisition and Date Made have much fewer missing rows than other columns. This can point to the fact that when MOMA collected art pieces, they cared more about when the object was made, rather than the biography of the artist himself or herself (such as birth year, death year, gender, or even medium!)
 
 ```{r}
-=======
->>>>>>> eb16bf4fb51a30361edad37afdb9f559dd4b1550
 # First, what is MOMA's preference on Nationality?
 moma_org <- moma_clean[2] %>% group_by(Nationality) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency) 
 
@@ -410,10 +400,9 @@ all_us <- moma_clean %>% group_by(Nationality) %>% filter(Nationality == 'Americ
 first_name_all <- as.data.frame(word(all_us$DisplayName,1))
 colnames(first_name_all) <- 'first_name'
 first_name_allc <- first_name_all %>% group_by(first_name) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
-<<<<<<< HEAD
+
 #first_name_allc$first_name <- capitalise(first_name_allc$first_name)
-=======
->>>>>>> eb16bf4fb51a30361edad37afdb9f559dd4b1550
+
 # first name frequency
 ggplot(tail(first_name_allc,10), aes(fct_reorder(first_name, Frequency), Frequency)) +
   geom_bar(stat = "identity") +
@@ -487,7 +476,7 @@ ggplot(tail(first_name_allc_jp,10), aes(fct_reorder(first_name, Frequency), Freq
   geom_col(color = mycolor, fill = myfill) +
   coord_flip() +
   theme(plot.title = element_text(face = "bold"))
-<<<<<<< HEAD
+
 ```
 
 ```{r}
@@ -728,6 +717,4 @@ artworks_mos$BirthIdx[(artworks_mos$BirthIdx)== FALSE] <- 3
 artworks_mos <- artworks_mos %>% mutate(BirthType = cut(BirthIdx, breaks = c(0,1,Inf), labels = c("First Half", "Second Half")))
 artworks_mos <- artworks_mos %>% group_by(Gender, BirthType) %>% dplyr::summarise(Frequency = dplyr::n())
 vcd::mosaic(BirthType ~ Gender, artworks_mos)
-=======
->>>>>>> eb16bf4fb51a30361edad37afdb9f559dd4b1550
 ```
