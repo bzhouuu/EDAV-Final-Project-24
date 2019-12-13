@@ -1,0 +1,1165 @@
+---
+title: "A Beginner's Guide to MoMA"
+author: "Bangwei Zhou, Zhihao Ai"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+#load packages
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(forcats)
+library(Hmisc)
+library(HH)
+library(mi)
+library(extracat)
+library(tm)
+library(rapportools)
+library(vcd)
+library(plotly)
+library(shiny)
+```
+
+```{r message=FALSE, warning=FALSE}
+# set color
+mycolor <- "#80593D"
+myfill <- "#9FC29F"
+
+# theme plot
+theme_dotplot <- theme_minimal(16) +
+  theme(axis.text.y = element_text(size = rel(.75)),
+  axis.ticks.y = element_blank(),
+  axis.title.x = element_text(size = rel(.75)),
+  panel.grid.major.x = element_blank(),
+  panel.grid.major.y = element_line(size = 0.5),
+  panel.grid.minor.x = element_blank())
+```
+
+```{r message=FALSE, warning=FALSE}
+# load data from MoMA and met
+MoMA_artists <- read_csv("../data/raw/MoMA/Artists.csv")
+MoMA_artworks <- read_csv("../data/raw/MoMA/Artworks.csv")
+```
+
+# I. Introduction
+This project had the intention to explore museum datasets; in particular, we focused on the MoMA dataset which was found online from MoMA's own github page. We were both interested in the art world, and wanted to learn something more about the museums and their collections through the lens of data analysis and visualization. Thus, it was really a no-brainer when we found the gibhub pages to four of the museums (Met, MoMA, TATE, and Carnegie Museum in Pittsburg). However, after much deliberation, we decided to just focus on MoMA as it contains the most information, when the other three datasets have their own limitations. For example, the Met dataset does not have the columns for artworks acquisition year and the genders for the artists; the TATE dataset is tricky in a sense that it contains all of the museums under the title of TATE as well as some other collections from the National Galleries of Scotland. For such a reason, we felt that even if we could use it to compare with the MoMA dataset, the result wouldn't be accurate as the Tate github does not provide us a clear instruction on how to identify the accession numbers with the corresponding sub-Tate museums. And since we decided not to do Met and Tate, we felt we would not do Carnegie either, as reputation wise, the Carnegie museum is less well-known as compared to MoMA; thus, harder to compare MoMA and Carnegie side by side.
+
+While working with the datasets, we were little clueless at first. We did not know which question to start with, as the datasets are quite massive and the information are quite basic (MoMA provides two datasets, one for the artists and one for the artworks), so we decided to let the data lead us. We first focused on the MoMA artists dataset and plotted a frequency bar chart by the overall artists' nationalities in MoMA. They are the artists who had artwork(s) appeared in/acquired by MoMA, and we wanted to know where they all from- do most of them come have the the same background or they are a very diverse group? In other words, will MoMA have a preference towards one particular nationality or MoMA is neutral towards all? Then we asked ourselves, what about the birth years? Will MoMA prefer some birth years over others? Perhaps, some birth years were more "creative" than others, because they were able to experience special historical events? We also asked ourselves the big question on top of them- what about the gender ratio? Was MoMA doing a great job keeping the gender ratio balanced, inbalanced, or showing improvement over time? These two sets of questions provided us some interesting results (and perhaps biases) about the artists in MoMA, that challenged our intuitions as non-art-history students, and are questions that we thought could be meaningful and critical.
+
+Then, we jumped to the artworks dataset. We felt the questions on the artworks dataset would be much more serious, as the datset reflected more accurately on what is literally "in" the museum. For example, we asked the same question on nationality frequency, but this time we felt the result would reflect more accurately on MoMA's true taste. The idea was this: even if some nationalities have more artists in MoMA, that does not necessarily mean that those nationalities are more important; they might contribute much fewer artworks to MoMA as compared to other less frequent nationalities. And the reuslt really confirmed our hypothesis.
+
+But the real questions we were trying to tackle here ( with the artworks dataset) were their acquisition trends and their age preferences. In other words, what were MoMA's acquisition trends on nationality, gender and classification? And what they think is the prime time for an artist? The first question is more straightforward- we wanted to plot a timeseries line graph on the acquistion years and observe if there is any significant pattern. But the second question is worth explaining. In the artworks dataset, we are also provided with the column- year of creation for the object. Thus, we could then calculate the age of the artist when that artwork is created, based on the birth year of the artist and the year of creation for the object. Then, with this information, we could plot on the frequency of those ages by classification (video, design, painting, print, architecture and etc.). Through these two questions, we expect to understand the high level picture of MoMA's "taste" and render a beginner's guide to get into the artworld (at least being selected by MoMA).
+
+# II. Data sources
+We found our MoMA dataset online from MoMA's own github page. This was a collective process as both of us were sitting together doing searches for any dataset related to museum and the artworld. We simply cloned and downloaded the dataset from the MoMA github page, as MoMA does provide ready-to-use csv files. There were other choices at the beginning. We found three other museum datasets (Met, Tate and Carnegie Museum in Pittsburg) all from their own github pages, and we were thinking to work on all of the datasets and cross compare them. But the other three datasets have their own limitations, so we decided not to use them and just focus on the MoMA dataset instead. For example, the Met dataset does not provide any data for artworks acquisition year and the genders for the artists- MoMA dataset does provide them, and they are the key variables that we wanted to look into. The Tate dataset has relatively messy documentations. It contains all of the museums under the title of Tate as well as some works from the National Galleries of Scotland; thus, it would be hard to measure the accuracy of the result when comparing it with MoMA, so we decided not to use it. Lastly, since we decided not to use Met and Tate datasets, we felt less strongly about using the Carnegie dataset. From a reputation stand point, MoMA and Carnegie Museum are not on the same scale, so it would be hard to compare them. For these reasons, we decided to focus only on the MoMA dataset and dig deep into it. In fact, we are quite pleased with the results and glad we spent all of our time on one museum.
+
+The MoMA dataset in fact has two parts: the artworks dataset and the artists dataset, though it is possible to retrieve the artists dataset from the artworks dataset. The artists dataset has 15,853 observations and 9 variables in total, though some of the variables were not applicable to our study. We only used the Display Name, Nationality, Gender, BeginDate and EndDate, and excluded ConstituentID, ArtistBio, Wiki QID and ULAN. One thing to point out here, we dropped the "ArtistBio" column because it contains the same information separated into "Nationality", "BeginDate" and "EndDate".
+
+```{r message=FALSE, warning=FALSE}
+# load data from MoMA artist dataset
+MoMA_artists <- read_csv("../data/raw/MoMA/Artists.csv")
+dim(MoMA_artists)
+```
+
+With the artworks dataset, it has 138,124 observations with 29 variables in total, but again, not all variables were applicable to our study. We kept "Title", "Artist", "Nationality", "BeginDate", "EndDate", "Gender", "Date", "Medium", "Classification" and "DateAcquired". Here, the "Date" column means "Date Made", that is the year of creation for that artwork. And "BeginDate' and "EndDate' for both datasets mean "Birth Year" and "Death Year" for that artist.
+
+```{r message=FALSE, warning=FALSE}
+# load data from MoMA artworks
+MoMA_artworks <- read_csv("../data/raw/MoMA/Artworks.csv")
+
+dim(MoMA_artworks)
+```
+
+
+We didn't find anything wrong with or problematic about the datasets, as they were quite comprehensive; the only concern we had were with the missing values and the wrong formatting. From example, NA can be denoted as NA or "unknown" and etc.. And for the "Date" (Date Made) column, some were denoted as exact years, but some others were denoted as ranges, which we felt would create difficulties when working with the dataset.
+
+# III. Data transformation
+
+We didn't have a hard time getting the data into the form in which we could work with in R. The datasets are in csv files on the github page. The only difficulty we had while accessing the dataset was with the Met, when it was uploaded on github as lfs file. But since we decided not to use the Met dataset, this difficulty (though resolved) will not be a concern now.
+
+However, we did spend huge amounts of time cleaning up the dataset, so that the entries were either in the right format or were dropped if we felt the process of cleaning them could take forever (we only dropped non-NA rows when working on the age question). For example, when identifying the NAs, we would need to use *dplyr::sumamrize* to pick out the wrong formatting (since NAs really come in various formats and always occur several times, such as "nationality unknown", "u.d.", "Unknown" and many more). 
+
+And when working with the age question, we spent a lot of time thinking about how to construct the dataset to maximize accuracy. For example, we faced questions like- there are artworks that have more than two artists, how do we track two ages at the same time, when some artists are unknown and some artists are known for the same artwork? How do we properly calculate the ages, when the year of creation is a range? There are also other more high level questions like, how do we handle negative ages? They can be either the artwork is created after the person's death, as a look back, or the data information is just wrong so we have a negative age. For these reasons, we decided to drop all artworks with more than one artists; that means, we are only focusing on single-artist artworks when answering the age question. And we extracted the first four consecutive digits when working with ranges (e.g., 1940-42 would be 1940; 1940s would be 1940). And after we calculated the ages, we would drop all ages below 15 and all ages above 70. The age cut off points are subjective, but we made the decision after we calculated the ages, and observed that most of the ages are in a close range. In fact, we even compared the result before cutting and after cutting, and there were no significant differences. Thus, to conclude, though the datasets do not have any obvious or immediate problems, we did run into some based on the questions that we wanted to answer for this project.
+
+# IV. Missing values
+
+The missing values are reasonably surprising. In fact, so surprising and interesting (at least to us) that we decided to do an interactive activity on the missing values. We want to invite you to a quiz and see if you know or thought to know enough about MoMA!
+
+<iframe src="quiz-moma.html" width="800" height="740" frameBorder="0" style="display:block;margin: auto;"></iframe> 
+
+Since we are working with two datasets, the artists and the artworks, we will describe the missing values and patterns for each of them.
+
+For the artists dataset, before cleaning, we have 2,556 missing values for the Nationality column and 3,179 missing values for the Gender column and none for all the other columns. 
+
+```{r message=FALSE, warning=FALSE}
+# selected columns from artists dataset
+# we chose DisplayName, Nationality, Gender, BeginDate, and EndDate
+artists_clean <- MoMA_artists[c(2,4,5,6,7)]
+
+colSums(is.na(artists_clean))
+```
+
+After cleaning, we have 53 missing values for "DisplayName", 2736 for "Nationality", 3179 for "Gender", 3791 for "BeginDate" and 10,779 for "EndDate". 
+
+```{r message=FALSE, warning=FALSE}
+# clean up BeginDate and EndDate columns
+artists_clean$BeginDate[(artists_clean$BeginDate == 0)] <- NA
+artists_clean$EndDate[(artists_clean$EndDate == 0)] <- NA
+
+# group the other three columns and see if there is any NAs that are not tracked by NA due to human error while entering the data
+nationality_na <- artists_clean %>% group_by(Nationality) %>% dplyr::summarise(Total = dplyr::n()) %>% arrange(Total)
+gender_na <- artists_clean %>% group_by (Gender) %>% dplyr::summarise(Total = dplyr::n()) %>% arrange(Total)
+name_na <- artists_clean %>% group_by(DisplayName) %>% dplyr::summarise(Total = dplyr::n()) %>% arrange(Total)
+
+# by manually search "unknown" and related keywords in the dataset, we caught on error: NAs in Nationality are also denoted as "nationality unknown"
+artists_clean$Nationality[artists_clean$Nationality == "Nationality unknown"] <- NA
+
+# Similarly, with the Name column, there are also some bad format NAs
+artists_clean$DisplayName <- tolower(artists_clean$DisplayName)
+artists_clean$DisplayName[str_detect(artists_clean$DisplayName, "unknown") == TRUE] <- NA
+
+# with the gender column, we noticed that the biggest problem is with lowercase and upper case; also, since there is only 1 data observation on binary gender, we might consider dropping it later
+artists_clean$Gender <- tolower(artists_clean$Gender)
+
+colSums(is.na(artists_clean))
+```
+
+Based on the *visna* graph, the most common missing pattern is only missing the "EndDate", followed by not missing any value and missing all four except the "DisplayName". Now, it does seem to make sense to have huge missing values on "EndDate". Our justification is that since MoMA is a Museum of Modern Art, most of the artists they work with are still alive. However, it was still surprising to see this many missing values, 0.3% for "DisplayName", 17% for "Nationality", 20% for "Gender", 24% for "BeginDate" and 68% for "EndDate". Perhaps, it is difficult for MoMA to collect the biographies of the artists or the artists choose not to reveal their info.
+
+```{r message=FALSE, warning=FALSE}
+visna(artists_clean, sort = "b")
+```
+
+For the artworks dataset, before cleaning, we have 39 for "Title", 1455 for "Artist", 1455 for "Nationality", 1455 for "BeginDate", 1455 for "EndDate", 1455 for "Gender", 2370 for "Date", 10963 for "Medium", 0 for "Classification" and 6741 for "DateAcquired". 
+
+```{r message=FALSE, warning=FALSE}
+# selected columns from artworks dataset
+# we chose title, artist, beginDate, endDate, Gender, Date Made, Medium, Classification, Acquisition Year
+artworks_clean <- MoMA_artworks[c(1,2,5,6,7,8,9,10,14,16)]
+
+# check missing before cleaning
+colSums(is.na(artworks_clean))
+```
+
+Now, there are two approaches that we can use to clean up the artworks dataset. The first approach is to detect NAs first and then to remove the rows that indicate artworks created by multiple artists; and the second approach is to remove the rows first, then to detect NAs. Recall that some artworks are created by more than one artist, and the formatting can be really disturbing. For example, for the "Artist" column, we can have a case like "Artist A, Artist B, unknown". Then, the corresponding "Nationality" column will have "unknown, Nationality A, unknown". In cases like this, the best and safest practice would be to extract each associating artist to one row, with the corresponding info from other columns. So in the example above, we will generate two more rows (three in total) to represent that artwork, each artist sitting on one row. However, since these cases are just a small set of the whole dataset, about 5.9%, we decided to drop them for simplicity. To detect those special cases, we split the "Artist" column on "," and make a new column to indicate the length. If there is one artist, then the lenght returned is 1; else, it will be larger than 1. Then, we can easily separate out the special cases and drop them. 
+
+```{r message=FALSE, warning=FALSE}
+# Some pieces are done by more than one artist; check how many are there to decide what to do with them
+artworks_single <- artworks_clean %>% 
+  mutate(NumberArtists = lengths(strsplit(Artist, ","))) %>%
+  mutate(NumberType = cut(NumberArtists, breaks = c(0,1,Inf), labels = c("Single", "Multiple"))) %>%
+  filter(NumberType == 'Single')
+
+artworks_single <- artworks_single %>% select(-NumberArtists, -NumberType)
+
+dim(artworks_single)
+```
+
+(After the drop, we have 129990 observation, which means we have 8134 artworks thare are created by more than one artist, that is 5.9% of the overall observations.)
+
+But to really identify the NAs, we decided to use the second approach, which we felt would give us more accurate results. The reason is as follows: the method we used to detect NAs was by detecting if a given entry contains the word related to NAs, such as "unknown", "u.d." and etc.. By this method though, if an entry is in the format "Artist A, Artist B, unknown", then that column would become NA all in once. In other words, the special feature of that row, representing an artwork created by multiple artists, would be swiped out as well. For this reason, we felt it would be safer to remove rows first, then to detect NAs. Then, we can ensure that the dataset we were dealing with was a dataset only contains artworks created by single artist.
+
+So the before cleaning after dropping is as follows:
+
+```{r message=FALSE, warning=FALSE}
+colSums(is.na(artworks_single))
+```
+
+And after cleaning, we have 
+
+```{r message=FALSE, warning=FALSE}
+# clean data that are bracked by ()
+artworks_single$Nationality <- removePunctuation(artworks_single$Nationality)
+artworks_single$BeginDate <- removePunctuation(artworks_single$BeginDate)
+artworks_single$EndDate <- removePunctuation(artworks_single$EndDate)
+artworks_single$Gender <- removePunctuation(artworks_single$Gender)
+artworks_single$Classification <- removePunctuation(artworks_single$Classification)
+
+# add columns for acquisition year
+artworks_single <- artworks_single %>% mutate(YearAcquired = substr(DateAcquired,1,4))
+
+# for clarity, we remove the original column
+artworks_single <- dplyr::select(artworks_single,-DateAcquired)
+
+# Nationality and Gender columns have many empty rows so we use *is.empty* from *rapportools*
+artworks_single$Nationality[is.empty(artworks_single$Nationality) == TRUE] <- NA
+artworks_single$Gender[is.empty(artworks_single$Gender) == TRUE] <- NA
+artworks_single$Gender <- tolower(artworks_single$Gender)
+
+# BeginDate and EndDate have many 0 rows to indicate NAs
+artworks_single$BeginDate[artworks_single$BeginDate == 0] <- NA
+artworks_single$EndDate[artworks_single$EndDate == 0] <- NA
+
+# clean "unknown" in Date column
+artworks_single$Date[artworks_single$Date == "unknown"] <- NA
+
+# we use the same mechanism that detect the most number of NAs (increase false negative, but make sure we increase true positive)
+artworks_single$Title[str_detect(artworks_single$Title, "unknown") == TRUE] <- NA
+artworks_single$Artist[str_detect(artworks_single$Artist, "unknown") == TRUE] <- NA
+artworks_single$Medium[str_detect(artworks_single$Medium, "unknown") == TRUE] <- NA
+artworks_single$Title[str_detect(artworks_single$Title, "Unknown") == TRUE] <- NA
+artworks_single$Artist[str_detect(artworks_single$Artist, "Unknown") == TRUE] <- NA
+artworks_single$Medium[str_detect(artworks_single$Medium, "Unknown") == TRUE] <- NA
+artworks_single$Nationality[str_detect(artworks_single$Nationality, "Unknown") == TRUE] <- NA
+artworks_single$Nationality[str_detect(artworks_single$Nationality, "unknown") == TRUE] <- NA
+artworks_single$Date[artworks_single$Date == "n.d."] <- NA
+artworks_single$Classification[artworks_single$Classification == "not assigned"] <- NA
+
+colSums(is.na(artworks_single))
+```
+
+This means, 3.9% for "Artist", 5.5% for "Nationality", 6.9% for "BeginDate", 37% for "EndDate", 6.0% for "Gender", 2.1% for "Date", 8.0% for "Medium" and 4.7% for "YearAcquired". And the missing patterns are as follows:
+
+```{r message=FALSE, warning=FALSE}
+visna(artworks_single, sort = "b")
+```
+
+Here, the most common missing pattern is not missing any data, followed by missing only the "EndDate" and missing only the "Medium". To our surprise though, we are missing far less data for the "Date" (Date Made) column than the other columns that represent the background of an artist (such as BeginDate, Gender, Nationality and etc.). This means that either it is more difficult for the museum to collect the information related to the biography of an artist than to collect the year of creation for the artwork, or the museum simply cares more about the artworks themselves than the artists. Of course, there are more complexities that can go into the process of collecting the information, and it is also highly possible that the artists themselves decide not to reveal the info. But by all means, we felt this result (that we are missing more data on info related to the biography of an artist than the info on the year of creation for an artwork) was really unexpected and challenged our intuition, so we decided to build an interactive activity to engage the readers, and invite them to our thought puzzle and test their knowledge and intuition as well.
+
+To conclude, from both datasets (artists and artworks), the most common missing data for both of them is from the "EndDate" column. This can be explained since very likely MoMA is working with artists that are still alive; thus, it makes sense for the "EndDate' (Death Year) to be missing. However, it was to our surprise that there are far fewer missing data from the "Date" (Date Made) column. Besides, we were also confused by the high missing value from the "Medium" column. But we ran out of time to dig deep into this and explored the reasons or patterns.
+
+# V. Results
+
+## 1. Artists dataset
+
+As we mentioned in the introduction, we were at first clueless in terms of where to start, so the natural question to ask is as follows: who makes up the MoMA artist group? Who were so lucky to be selected by MoMA? Do they all belong to the same nationality? Or they are a much more diverse group? Besides, are they from the same birth years? Does MoMA have a preference for some years over other years? What about the gender ratio? Is MoMA doing a great job at maintaining a fair and equal gender ratio? Is the gender ratio balanced, imbalanced or showing improvement over time? Last but not the least, what about the first names? Does MoMA have a preference for some names over others? What are the common names in the MoMA artist group?
+
+### A. Nationality Frequency Bar Chart
+
+To respond to the questions we prepared for ourselves, we first plotted a Nationality Frequency Bar Chart. We wanted to understand if the artists featured by MoMa belong to the same nationality or they represent a very diverse group. We dropped the NAs since they are irrelevant here. Unfortunately, based on the graph below, majority of the artists in MoMa were Americans. Even though MoMA consists of artists from 126 different countries, American is the most frequent nationality, and it represents 34.5% (5472/15853) of the data. For better visualization, we plotted again on the top 10 nationalities. They represent ~65% (10355/15853) of the overall data observations, which is a confirmation of the long tail effect that is quite obvious from the graph below.
+
+In addition, we also plotted the same top 10 Frequency Bar Chart, but splitted on genders. For better visualization, we dropped the NAs and one non-binary. However, the result was not pleasing, as the graph does not indicate a balanced gender ratio, heavily dominated by male artists. 
+
+Thus, from the three graphs below, we concluded that even though MoMA has a diverse list of the nationalities, majority of the artists are still from the same country. In other words, MoMA is full of American Artists; perhaps, the better name for MoMA is MoAA, the Museum of American Art. In fact, to be more specific, the name should be the Museum of American Male Art. 
+
+```{r fig.height = 20, message=FALSE, warning=FALSE}
+nat_freq <- artists_clean %>% group_by(Nationality) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency) %>% ungroup()
+
+nat_freq <- nat_freq %>% group_by(Nationality) %>% filter(is.na(Nationality) == FALSE) %>% ungroup()
+# we remove the NAs
+
+ggplot(nat_freq, aes(fct_reorder(Nationality, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("American Artists really took over MoMA...", subtitle = "Overall Nationality Frequency Bar Chart") +
+  labs(x = "Nationality", y = "Frequency") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+```{r message=FALSE, warning=FALSE}
+nat_freq_10 <- tail(nat_freq, 10)
+
+ggplot(nat_freq_10, aes(fct_reorder(Nationality, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MoMA or MoAA (Museum of American Art)?", subtitle = "A Closer Look at the Nationality Frequency Bar Char (Top 10)") +
+  labs(x = "Nationality", y = "Frequency") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+```{r message=FALSE, warning=FALSE}
+nat_gender <- artists_clean %>% group_by(Nationality, Gender) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency) %>% filter(Nationality %in% c("American", "British", "German", "Italian", "Japanese", "Swiss", "Dutch", "Russian", "Austrian")) %>% ungroup()
+
+# filter out non-binary 
+nat_gender <- nat_gender %>% group_by(Gender) %>% filter(Gender %in% c("female", "male")) %>% ungroup()
+
+ggplot(nat_gender, aes(fct_reorder(Nationality, Frequency),Frequency, fill = Gender)) +
+  geom_bar(stat = "identity") +
+  ggtitle("MoMA Really Needs to Work on Their Gender Balance", subtitle= "Nationality Frequency Bar Chart on Gender (Top 10)") +
+  labs(x="Nationality", y = "Frequency") +
+  scale_fill_brewer(palette= "Oranges")+
+  geom_col(color = mycolor) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+
+```
+
+### B. Birth Year Frequency Histogram
+
+Then, we did a Birth Year Frequency Histogram. We wanted to know if MoMA has a preference for some birth years over others, or alternatively, we could say that some birth years were more "creative", so more of their objects were selected by MoMA. The hypothesis behind this was that given different birth years, the artists might experience very different events (perhaps big historical events that could only happen once). And those events might trigger or become their sources of inspirations that made them different from other birth years.
+
+Surprisingly, we did see a highly concentrated area. Around the 1940s, the frequency of those birth years peaked on the histogram below. This literally suggests that those years were the most frequent birth years of the artists in MoMA. If we open our history textbook, they were the artist group surrounded by war news. Perhaps, we could say that there exists a connection between war and modern art, though a very untested theory.
+
+```{r message=FALSE, warning=FALSE}
+by_freq <- artists_clean %>% group_by(BeginDate) %>% dplyr::summarise(Frequency = dplyr::n()) %>% filter (is.na(BeginDate) == FALSE)%>% ungroup()
+by_freq$BeginDate <- strtoi(by_freq$BeginDate)
+
+# drop NAs
+
+
+ggplot(by_freq, aes(x = BeginDate, weight = Frequency)) + 
+  # plotting
+  geom_histogram(bins = 20, colour = "#80593D", fill = "#9FC29F", boundary = 2000) +
+  # formatting
+  ggtitle("1940s: the Most Popular Birth Years for MoMA Artists",
+          subtitle = "Aritst Birth Year Frequency Histogram") +
+  labs(x = "Birth Year", y = "Frequency") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+
+```
+
+### C. Gender Time Series Graph
+
+Followed by the analysis of the birth years of the artists in MoMA, we also wanted to the gender aspect. Yes, we undersood that male artists really dominated MoMA, but what if in some birth years, more female artists were featured by MoMA? In fact, from the graphs below, we did see that at year 1971, the female-male ratio peaked at 62%, though the overall ratio was still very depressing.
+
+```{r message=FALSE, warning=FALSE}
+by_gender <- artists_clean %>% filter(Gender %in% c("female", "male")) %>%group_by(Gender,BeginDate) %>% dplyr::summarise(Frequency = dplyr::n()) %>% filter (is.na(BeginDate) == FALSE)%>% ungroup()
+
+by_gender$BeginDate <- strtoi(by_gender$BeginDate)
+
+ggplot(by_gender, aes(BeginDate, Frequency, color = Gender)) +
+geom_line() + 
+ggtitle("MoMA Female-Male Birth Year Comparison") +
+labs(x = "Year", y = "Frequency") +
+theme(plot.title = element_text(face = "bold")) +
+theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+theme(plot.caption = element_text(color = "grey68"))
+
+```
+
+```{r message=FALSE, warning=FALSE}
+moma_birthy_gen_ratio <- artists_clean %>%
+  filter(Gender %in% c("female", "male")) %>%
+  filter(BeginDate >= 1900 & BeginDate <= 1980) %>%
+  group_by(BeginDate, Gender) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup() %>%
+  group_by(BeginDate) %>% 
+  dplyr::mutate(Ratio = 100*Frequency[Gender=="female"]/Frequency[Gender == "male"]) %>%
+  ungroup()
+
+ggplot(moma_birthy_gen_ratio, aes(BeginDate, Ratio)) +
+   geom_line(color = "blue") + 
+   ggtitle("Gender Ratio Peaked at Year 1971 (62%)!", subtitle = "Timeseries Graph on Birth Year Female-Male Ratio (1900 - 1980)") +
+   labs(x = "Year", y = "Ratio (%)") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+### D. First Name Frequency Bar Chart
+
+Finally, just for fun, we also did a bar chart on the frequency of first names by nationality. In other words, if you want yourself or your kid(s) to become an artist featured by MoMA, take a look at the graphs below. 
+
+```{r fig.width=8, fig.height=8, message=FALSE, warning=FALSE}
+artists_first_name <- artists_clean %>%
+  filter(Nationality %in% c('American', 'German', 'French', 'British', 'Japanese')) %>%
+  rename(first_name = 'DisplayName')
+artists_first_name$first_name <- capitalize(word(artists_first_name$first_name, 1))
+artists_first_name <- artists_first_name %>%
+  group_by(Nationality, first_name) %>%
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  top_n(n = 10, wt = Frequency) %>%
+  arrange(Frequency, .by_group = TRUE) %>%
+  ungroup()
+
+first_name_us_plot <- artists_first_name %>%
+  filter(Nationality == 'American') %>%
+  ggplot(aes(fct_reorder(first_name, Frequency), Frequency)) +
+    geom_col(color = mycolor, fill = myfill) +
+    coord_flip() +
+    facet_wrap(~Nationality) +
+    labs(x = "First Name", y = "") +
+    theme_gray(16) +
+    theme(plot.title = element_text(face = "bold")) +
+    theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+    theme(plot.caption = element_text(color = "grey68"))
+
+first_name_de_plot <- artists_first_name %>%
+  filter(Nationality == 'German') %>%
+  ggplot(aes(fct_reorder(first_name, Frequency), Frequency)) +
+    geom_col(color = mycolor, fill = myfill) +
+    coord_flip() +
+    facet_wrap(~Nationality) +
+    labs(x = "", y = "") +
+    theme_gray(16) +
+    theme(plot.title = element_text(face = "bold")) +
+    theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+    theme(plot.caption = element_text(color = "grey68"))
+
+first_name_fr_plot <- artists_first_name %>%
+  filter(Nationality == 'French') %>%
+  ggplot(aes(fct_reorder(first_name, Frequency), Frequency)) +
+    geom_col(color = mycolor, fill = myfill) +
+    coord_flip() +
+    facet_wrap(~Nationality) +
+    labs(x = "First Name", y = "Count") +
+    theme_gray(16) +
+    theme(plot.title = element_text(face = "bold")) +
+    theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+    theme(plot.caption = element_text(color = "grey68"))
+
+first_name_uk_plot <- artists_first_name %>%
+  filter(Nationality == 'British') %>%
+  ggplot(aes(fct_reorder(first_name, Frequency), Frequency)) +
+    geom_col(color = mycolor, fill = myfill) +
+    coord_flip() +
+    facet_wrap(~Nationality) +
+    labs(x = "", y = "Count") +
+    theme_gray(16) +
+    theme(plot.title = element_text(face = "bold")) +
+    theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+    theme(plot.caption = element_text(color = "grey68"))
+
+grid.arrange(first_name_us_plot, 
+             first_name_de_plot, 
+             first_name_fr_plot,
+             first_name_uk_plot,
+             ncol=2,
+             nrow=2,
+             top = textGrob("MoMA's Favorite First Names by Nationality",gp=gpar(fontsize=18, fontface = "bold")))
+```
+
+## 2. Artworks dataset
+
+With the artworks dataset, we heavily worked on the key variable- the year of acquisition. With this variable, we were able to see the change of MoMA's acquisition behavior over time. For this reason, we asksed ourselves the following questions: were there any pattern with MoMA's overall acquisition frequency? Did MoMA went out acquiring artworks consistently throughout the years? Or did MoMA only went out acquiring in certain years? If the later, what were those years? What if we split on Nationality? Were the acquisitions from the same nationality or very different ones? If the same nationality, were the artworks acquired made by the same artist or a group of artists? With these questions in mind, we made the following graphs step by step.
+
+### A. Time Series Analysis of MoMA's Acquisition Pattern
+
+We started with a general acquisition frequency time series graph. Since each artwork (each row) in the artworks dataset has a corresponding year of acquisition, we simply summarized on the "YearAcquired" column to get a frequency count. The result was quite surprising: first, MoMA almost made acquisitions every year from early 1920s to now. However, there were certain peaks that were significantly larger than other years, meaning MoMA really acquired a lot from those years. Those years were 1964, 1968, and 2008. 
+
+We then splitted on gender. From an absolute sense, the female-male ratio seems to improve a lot after year 2,000. However, relatively speaking, we are still seeing way more artworks made by male artists than those by female artists. We then plotted a female-male ratio over time. Surprisingly, 
+
+Then, we did some quick scans on classification and medium. We observed that the peak at year 2008 disappeared but the peaks still remain for year 1964 and 1968. This suggests that for those two years, MoMA acquired a lot of illustrated books (for year 1964) and photographs (for year 1968). 
+
+When we plotted on Medium though, the result changes again. We are only seeing one peak around at year 1968 and it was albumen silver print. We will not be looking into them due to the time constraint of this project, but we made some interactive plots in the next section for the reader to engage more with these time series graphs. However, these two graphs all lead to the final and the most important question- so what happened during those years?
+
+```{r message=FALSE, warning=FALSE}
+aqr_freq <- artworks_single %>% 
+  group_by(YearAcquired) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup()
+
+# change to numerical
+aqr_freq$YearAcquired <- strtoi(aqr_freq$YearAcquired)
+aqr_freq <- aqr_freq %>% group_by(YearAcquired) %>% filter(is.na(YearAcquired) == FALSE)
+
+# plot
+ggplot(aqr_freq, aes(x = YearAcquired, y = Frequency))+
+  geom_line(color = "blue") +
+  ggtitle("MoMA Went Crazy on Shopping in Year 1964, 1968 and 2008", subtitle = "Time Series Graph on the Number of Artworks Acquired Each Year") +
+  labs(x = "Acquisition Year", y = "Frequency") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+
+```
+
+```{r message=FALSE, warning=FALSE}
+
+# moma_birthy_gen_ratio <- artists_clean %>%
+#   filter(Gender %in% c("female", "male")) %>%
+#   filter(BeginDate >= 1900 & BeginDate <= 1980) %>%
+#   group_by(BeginDate, Gender) %>% 
+#   dplyr::summarise(Frequency = dplyr::n()) %>%
+#   ungroup() %>%
+#   group_by(BeginDate) %>% 
+#   dplyr::mutate(Ratio = 100*Frequency[Gender=="female"]/Frequency[Gender == "male"]) %>%
+#   ungroup()
+
+
+aqr_gender <- artworks_single %>% filter(Gender %in% c("female", "male")) %>% filter(is.na(YearAcquired) == FALSE) %>%
+  group_by(YearAcquired, Gender) %>%
+  dplyr::summarise(Frequency = dplyr::n()) %>% ungroup() #%>% filter(is.na(Gender)== FALSE)%>% group_by(YearAcquired) %>% dplyr::mutate(Ratio = 100*Frequency[Gender=="female"]/Frequency[Gender == "male"]) %>%
+  #ungroup()
+
+aqr_gender <- aqr_gender %>% filter(is.na(YearAcquired) == FALSE)
+
+aqr_gender$YearAcquired <- strtoi(aqr_gender$YearAcquired)
+
+# plot
+ggplot(aqr_gender, aes(x = YearAcquired, y = Frequency, color = Gender))+
+  geom_line() +
+  ggtitle("A Closer Look at the Male Dominance in MoMA", subtitle = "Time Series Graph on the Number of Artworks Acquired Each Year, By Gender") +
+  labs(x = "Acquisition Year", y = "Frequency") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+```{r message=FALSE, warning=FALSE}
+aqr_gender <- artworks_single %>% 
+  # filter(!is.na(Gender)) %>%
+  filter(!is.na(YearAcquired)) %>% 
+  filter(Gender %in% c("female", "male")) %>% 
+  group_by(YearAcquired, Gender) %>%
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  dplyr::mutate(Ratio = ifelse(is.null(Frequency[Gender=="female"]), 
+                               0, 
+                               ifelse(is.null(Frequency[Gender == "male"]),
+                                      1,
+                                      100*Frequency[Gender=="female"]/Frequency[Gender == "male"]))) %>%
+  ungroup() %>%
+  drop_na()
+
+aqr_gender$YearAcquired <- strtoi(aqr_gender$YearAcquired)
+
+ggplot(aqr_gender, aes(x = YearAcquired, y = Ratio)) +
+  geom_line(color = "blue") +
+  ggtitle("Female-Male Ratio Peaked at Year 1995 (110%)", subtitle = "Time Series Graph on the Number of Artworks Acquired Each Year, By Gender") +
+  labs(x = "Acquisition Year", y = "Ratio (%)") +
+  theme_gray(16) +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+```{r message=FALSE, warning=FALSE}
+class_freq <- artworks_single %>% group_by(Classification) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+```
+
+```{r message=FALSE, warning=FALSE}
+# see what classification they like and how they change over year on the top 10
+aqr_class <- artworks_single %>%
+  filter(Classification %in% c("Print", "Photograph", "Illustrated Book","Drawing","Design", "Architecture","Painting", "Video")) %>%
+  group_by(YearAcquired, Classification) %>%
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup %>%
+  arrange(Frequency)
+
+aqr_class<- aqr_class %>% filter(is.na(YearAcquired) == FALSE)
+
+aqr_class$YearAcquired <- strtoi(aqr_class$YearAcquired) 
+
+
+# plot
+ggplot(aqr_class, aes(x = YearAcquired, y = Frequency, color = Classification))+
+  geom_line() +
+  ggtitle("Print and Drawing are the MoMA New Trends in the 21st Century", subtitle = "Time Series Graph on the Number of Artworks Acquired, by Classification") +
+  labs(x = "Acquisition Year", y = "Frequency") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+```{r message=FALSE, warning=FALSE}
+med_freq <- artworks_single %>% filter(is.na(Medium) == FALSE) %>% group_by(Medium) %>% dplyr::summarise(Frequency = dplyr::n()) %>% arrange(Frequency)
+
+#tail(med_freq,10)
+```
+
+```{r message=FALSE, warning=FALSE}
+# see what classification they like and how they change over year on the top 10
+aqr_med <- artworks_single %>%
+  filter(Medium %in% c("Gelatin silver print", "Lithograph", "Albumen silver print","Pencil on paper","Letterpress", "Etching","Chromogenic color print", "Lithograph, printed in color", "Ink on paper")) %>%
+  group_by(YearAcquired, Medium) %>%
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup %>%
+  arrange(Frequency)
+
+aqr_med<- aqr_med %>% filter(is.na(YearAcquired) == FALSE)
+
+aqr_med$YearAcquired <- strtoi(aqr_med$YearAcquired) 
+
+
+# plot
+ggplot(aqr_med, aes(x = YearAcquired, y = Frequency, color = Medium))+
+  geom_line() +
+  ggtitle("Watch out for Artworks Made by Gelatin silver print and Letterpress", subtitle = "Time Series Graph on the Number of Artworks Acquired, by Medium") +
+  labs(x = "Acquisition Year", y = "Frequency") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+```{r message=FALSE, warning=FALSE}
+# nationality frequency change over year
+aqr_nationality <- artworks_single %>% 
+  filter(Nationality %in% c("American", "French", "German","British", "Spanish", "Italian", "Japanese","Swiss","Russian", "Dutch")) %>%
+  group_by(YearAcquired, Nationality) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup()
+
+#exclude NAs
+aqr_nationality<- aqr_nationality %>% filter(is.na(YearAcquired) == FALSE)
+
+aqr_nationality$YearAcquired <- strtoi(aqr_nationality$YearAcquired)
+
+
+# plot
+ggplot(aqr_nationality, aes(x = YearAcquired, y = Frequency, color = Nationality))+
+  geom_line() +
+  ggtitle("MoMA's Sudden Love for French Artworks in Year 1964 and 1968", subtitle = "Time Series Graph on the Number of Artworks Acquired Each Year, By Nationality") +
+  labs(x = "Acquisition Year", y = "Frequency") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+
+```
+
+### B. French Years and American Years
+
+To better answer the question, we first plotted the acquisition frequency time series graph on nationality. From the graph, we observed that for year 1964 and 1968, MoMA really went crazy for French artists. And followed by then, MoMA was only interested in American artists. The peak at 2008 was also concentrated by artworks made by American artists.
+
+Now that the mystery is finally revealed, we then filtered on the specific nationalities (French and American), so that we can observe if those acquisitions were contributed by a group of artists or a single artist. As it turned out, year 1964 was contributed by a group of French artists, but year 1968 was contributed by a single artist alone- Eugene Atget.
+
+For the peak years that were consisted of artworks made by American artists, we didn't see quite the same pattern as the French years, but some names still contributed a large portion, and they are Ludwig Mies Van der Rohe for year 1974 and Louise Bourgeois and George Maciunas for year 2008. Just to extend a bit further, we also plotted on the top classifications for the French years and the American years. However, nothing quite surprising was found.
+
+Beyond the graphs here, we also did a research for year 1974 our of curiosity. Ludig Mies Van der Rohe was a German-American architect, and he passed away in 1969. And those objects that he contributed were described as “pencil on paper” for the medium. From this result, we should be able to say that in year 1974, those objects contributed “by” Ludig Mies Van der Rohe were his architecture manuscripts. However, due to the time constraint, we were not able to include these observations and findings into our report.
+
+To conclude, we were able to locate and analyze the big actions done by MoMA in the 20th and 21st centuries. Those acquisition moves were interesting, as some were dominated by one artists, whereas others were consisted of a group of different artists. Due to the time constraint, we were not able to dig even deeper, but if one is paritcularly interested in the history of MoMA, one could simply look up those names, such as Eugene Atget, Ludig Mies Van der Rohe, Louise Bourgeois and George Maciunas and see how they might have shaped MoMA at those times. 
+
+```{r message=FALSE, warning=FALSE}
+# year around thos
+peak_fr <- artworks_single %>% 
+  filter(Nationality == "French") %>%
+  filter(YearAcquired %in% c("1964", "1968")) %>%
+  group_by(YearAcquired, Artist) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  filter(Frequency > 100) %>%
+  arrange(Frequency)
+
+peak_fr$Artist[peak_fr$Artist == 'Le Corbusier (Charles-Édouard Jeanneret)'] <- 'Le Corbusier'
+
+ggplot(peak_fr, aes(Frequency, fct_reorder(Artist, Frequency), color=YearAcquired)) +
+  geom_point() +
+  ggtitle("What happened in Year 1964 and 1968!?", subtitle = "Cleaveland Dotplot on the Artist Frequency, Year 1964 & 1968") +
+  xlab("Frequency") +
+  ylab("") +
+  labs(color='Year Acquired') +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+```{r message=FALSE, warning=FALSE}
+peak_us <- artworks_single %>% 
+  filter(Nationality == "American") %>%
+  filter(YearAcquired %in% c("1974","2008")) %>%
+  group_by(YearAcquired, Artist) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup() %>%
+  filter(Frequency > 50) %>%
+  arrange(Frequency)
+
+ggplot(peak_us, aes(Frequency, fct_reorder(Artist, Frequency), color=YearAcquired)) +
+  geom_point() +
+  ggtitle("What about the Years MoMA Went Crazy on American Arts?", subtitle = "Cleaveland Dotplot on the Artist Frequency, Year 1947 & 2008") +
+  xlab("Frequency") +
+  ylab("") +
+  labs(color='Year Acquired') +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+```{r message=FALSE, warning=FALSE}
+# year around thos
+peak_fr_class <- artworks_single %>% 
+  filter(Nationality == "French") %>%
+  filter(YearAcquired %in% c("1964", "1968")) %>%
+  group_by(YearAcquired, Classification) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  #filter(Frequency > 100) %>%
+  arrange(Frequency)
+
+# dotplot
+ggplot(peak_fr_class, aes(Frequency, fct_reorder(Classification, Frequency), color=YearAcquired)) +
+  geom_point() +
+  ggtitle("Illustrated Books and Photographs Described the Old MoMA", subtitle = "Cleaveland Dotplot on the Classification Frequency, Year 1964 & 1968") +
+  xlab("Frequency") +
+  ylab("") +
+  labs(color='Year Acquired') +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+```{r message=FALSE, warning=FALSE}
+# year around thos
+peak_us_class <- artworks_single %>% 
+  filter(Nationality == "American") %>%
+  filter(YearAcquired %in% c("1974", "2008")) %>%
+  group_by(YearAcquired, Classification) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  filter(Frequency != 0) %>%
+  arrange(Frequency)
+
+# dotplot
+ggplot(peak_us_class, aes(Frequency, fct_reorder(Classification, Frequency), color=YearAcquired)) +
+  geom_point() +
+  ggtitle("MoMA's Love for Prints Never Changed", subtitle = "Cleaveland Dotplot on the Artist Frequency, Year 1947 & 2008") +
+  xlab("Frequency") +
+  ylab("") +
+  labs(color='Year Acquired') +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+### C. Preferred Age by Classification Box Plots
+
+Other than MoMA's acquisition analysis, we also did an analysis on MoMA's preferred age to create art. The logic is as follows: since we are given with variables such as the year of creation for the artwork and the birth year of an artist, we can easily calculate the age of that artist when the object is made (year of creation - the birth year of that artists). And we use that age to plot on the top 9 frequent classifications in MoMA. The result was really surprisingly. On average, the age was a lot older than we expected, given that MoMA is a museum of "modern" art. Perhaps, modern is not that young. Besides, video is the category of artworks made by artists when they were slightly younger (before 35).
+
+In other words, if you also want to make it to MoMA, make videos before 35!
+
+```{r message=FALSE, warning=FALSE}
+artist_age <- artworks_single %>% 
+  filter(!is.na(BeginDate)) %>%
+  filter(!is.na(Date))
+
+artist_age$Date[artist_age$Date == "Unknown"] <- NA
+artist_age$Date[artist_age$Date == "n.d."] <- NA
+
+artist_age <- artist_age %>% 
+  mutate(YearLength = str_length(Date)) %>%
+  mutate(YearType = cut(YearLength, breaks = c(0,4,Inf), labels = c("Exact","Range"))) %>%
+  dplyr::rowwise() %>% 
+  mutate(YearCreated = str_extract(Date, "[0-9][0-9][0-9][0-9]")) %>%
+  filter(!is.na(YearCreated))
+
+artist_age$BeginDate <- strtoi(artist_age$BeginDate)
+artist_age$YearCreated <- strtoi(artist_age$YearCreated)
+artist_age <- artist_age %>%
+  mutate(Age = (YearCreated - BeginDate)) %>%
+  filter(Classification %in% c("Architecture", "Design", "Drawing", "Illustrated Book", "Painting", "Photograph", "Print", "Sculpture", "Video")) %>%
+  filter(Age >= 15 & Age <= 70)
+
+
+ggplot(artist_age, aes(x = reorder(Classification, -Age, median), y = Age)) +
+  geom_boxplot(fill=myfill) +
+  ggtitle("Make Videos Before 35: MoMA Preferred Ages to Create Art", subtitle = "Boxplots of Artists' Ages when Pieces Are Created, by Classification") +
+  labs(x = "Classification", y = "Age") +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35")) +
+  theme(plot.caption = element_text(color = "grey68"))
+```
+
+
+### D. Comparative Bar Charts on Nationality Frequency
+
+Last but not the least, we also plotted a Nationality Frequency Bar Chart but on artworks this time. Our intention was to compare it with the one we did with the artists. The idea is as follows: we might have a lot of artists from the same nationality, but does that necessarily mean that they contribute the most artworks to MoMA. The result was surprising. Spanish was not the on the top 10 list with the artists, but it was the top 10 list with the artworks. Perhaps, some major and famous Spanish artists really helped, though due to the time constraint, we were not able to run more in-depth analysis on this question.
+
+```{r warning=FALSE, message=FALSE}
+artworks_nat <- artworks_single %>%
+  drop_na(Nationality) %>%
+  group_by(Nationality) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>% 
+  ungroup() %>%
+  arrange(Frequency)
+
+ggplot(tail(artworks_nat,10), aes(fct_reorder(Nationality, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Spanish Artworks Were on the Top 10 List!", subtitle = "Artworks Nationality Frequency Bar Char (Top 10)") +
+  labs(x = "Nationality", y = "Frequency") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+```{r}
+nat_freq_10 <- tail(nat_freq, 10)
+
+ggplot(nat_freq_10, aes(fct_reorder(Nationality, Frequency), Frequency)) +
+  geom_bar(stat = "identity") +
+  ggtitle("Spanish Was Not on the Top 10 List!", subtitle = "Artists Nationality Frequency Bar Char (Top 10)") +
+  labs(x = "Nationality", y = "Frequency") +
+  geom_col(color = mycolor, fill = myfill) +
+  coord_flip() +
+  theme(plot.title = element_text(face = "bold")) +
+  theme(plot.subtitle = element_text(face = "bold", color = "grey35"))
+```
+
+# VI. Interactive component
+
+For the interactive component, we did two things. First, we turned the graphs in the previous sections into plotly graphs, so that the user can better engage with the graphs; for example, they can mouse on the graph and observe patterns that interest them and immediately know the correlating data to it. Let's say if one reader is very interested in those graphs on MoMA's acquisitions, then he or she can simply mouse on the graphs to pick out the years interest them.
+
+## 1. Artists dataset
+
+### A. Birth Year Frequency Histogram
+```{r warning=FALSE}
+moma_birthy <- artists_clean[4] %>% group_by (BeginDate) %>% dplyr::summarize(Frequency= dplyr::n()) %>% arrange(Frequency)
+moma_birthy10 <- moma_birthy %>% 
+  filter(!is.na(BeginDate)) %>%
+  filter(BeginDate > 0)
+moma_birthy10$BeginDate <- as.integer(moma_birthy10$BeginDate)
+
+plot_ly(moma_birthy10, x = ~Frequency, y=~BeginDate, histfunc='sum', type = "histogram", alpha=0.8) %>%
+  layout(title = list(text = "Aritst Birth Year Frequency Histogram", font = list(size = 16)),
+         xaxis = list(title = list(text = "Frequency", font = list(size = 14)),
+                      showline = FALSE,
+                      showgrid = TRUE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "Birth Year", font = list(size = 14)),
+                      gridcolor = 'lightgray',
+                      showline = FALSE,
+                      showgrid = FALSE,
+                      showticklabels = TRUE,
+                      ticks = '',
+                      nticks = 7)
+  )
+```
+
+
+### B. Gender Time Series Graph
+```{r warning=FALSE}
+moma_birthy5_gender <- artists_clean %>% 
+  filter(!is.na(BeginDate)) %>%
+  filter(Gender %in% c("female", "male")) %>%
+  group_by(Gender, BeginDate) %>% 
+  dplyr::summarize(Frequency=dplyr::n()) %>%
+  ungroup %>%
+  spread(Gender, Frequency)
+# just check the top 5%
+moma_birthy5_gender$BeginDate <- factor(moma_birthy5_gender$BeginDate, levels = moma_birthy5_gender$BeginDate)
+
+div(
+  plot_ly(moma_birthy5_gender, x = ~male, y = ~BeginDate, type = 'bar', orientation = 'h', name = 'male', marker = list(color = '#2678B2',
+                      line = list(color = '#2678B2',
+                                  width = 1))) %>%
+    add_trace(x = ~female, name = 'female',
+            marker = list(color = '#3ba9f7',
+                          line = list(color = '#3ba9f7',
+                                      width = 1))) %>%
+  layout(barmode = 'stack',
+         title = list(text = "MoMA Artist Birth Year Bar Chart by Gender", font = list(size = 16)),
+         xaxis = list(title = list(text = "Frequency", font = list(size = 14)),
+                      showgrid = TRUE,
+                      showline = FALSE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "Birth Year", font = list(size = 14)),
+                      showgrid = FALSE,
+                      showline = TRUE,
+                      showticklabels = TRUE,
+                      ticks = '',
+                      nticks = 12),
+         legend = list(x = 0.8, 
+                       y = 0, 
+                       orientation = 'v')
+  ), align = 'center')
+```
+
+```{r}
+moma_birthy_gen_time <- artists_clean %>% 
+  filter(Gender %in% c("female", "male")) %>% 
+  group_by(Gender, BeginDate) %>% 
+  dplyr::summarize(Frequency=dplyr::n()) %>%
+  ungroup() %>%
+  spread(Gender, Frequency)
+
+div(
+  plot_ly(moma_birthy_gen_time, x = ~BeginDate) %>%
+  add_trace(y = ~female, name ='Female', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~male, name ='Male', type = 'scatter', mode = 'lines') %>%
+  layout(title = list(text = "MoMA Artists Gender Comparison by Birth Year", font = list(size = 16)),
+         xaxis = list(title = list(text = "Birth Year", font = list(size = 14)),
+                      showline = FALSE,
+                      showgrid = FALSE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "Frequency", font = list(size = 14)),
+                      gridcolor = 'lightgray',
+                      showgrid = TRUE,
+                      showline = FALSE,
+                      showticklabels = TRUE,
+                      ticks = '',
+                      nticks = 7),
+         legend = list(x = 0.05,
+                       y = 0.9,
+                       orientation = 'h')
+  ),
+  align = 'center')
+```
+
+```{r}
+
+div(
+  plot_ly(moma_birthy_gen_ratio, x = ~BeginDate, y = ~Ratio, type = 'scatter', mode = 'lines') %>%
+  layout(title = list(text = "Timeseries Graph on Birth Year Female-Male Ratio (1900 - 1980)", font = list(size = 16)),
+         xaxis = list(title = list(text = "Birth Year", font = list(size = 14)),
+                      showline = FALSE,
+                      showgrid = FALSE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "Ratio (%)", font = list(size = 14)),
+                      gridcolor = 'lightgray',
+                      showgrid = TRUE,
+                      showline = FALSE,
+                      showticklabels = TRUE,
+                      ticks = '',
+                      nticks = 7)
+  ),
+  align = 'center')
+```
+
+### C. Most Contributing Artists
+```{r}
+artworks_artist <- artworks_single %>%
+  filter(!is.na(Artist)) %>%
+  group_by(Artist) %>%
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  arrange(Frequency)
+
+div(
+  plot_ly(tail(artworks_artist, 10), x = ~Frequency, y = ~fct_reorder(Artist, Frequency), type = 'bar', orientation = 'h') %>%
+  layout(title = list(text = "Artists that Contributed the Most Artworks to MoMA", font = list(size = 16)),
+         xaxis = list(title = list(text = "Count", font = list(size = 14)),
+                      showgrid = TRUE,
+                      showline = FALSE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "", font = list(size = 14)),
+                      showgrid = FALSE,
+                      showline = TRUE,
+                      showticklabels = TRUE,
+                      ticks = '')
+  ), align = 'center')
+```
+
+## 2. Artworks dataset
+
+### A. Time Series Analysis of MoMA’s Acquisition Pattern
+```{r}
+aqr_freq <- artworks_single %>% 
+  group_by(YearAcquired) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup()
+aqr_freq$YearAcquired <- strtoi(aqr_freq$YearAcquired)
+
+div(
+  plot_ly(aqr_freq, x = ~YearAcquired, y = ~Frequency, type = 'scatter', mode = 'lines') %>%
+  layout(title = list(text = "Acquisition Year Analysis on Overall Frequency Change", font = list(size = 16)),
+         xaxis = list(title = list(text = "Acquisition Year", font = list(size = 14)),
+                      showline = FALSE,
+                      showgrid = FALSE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "Frequency", font = list(size = 14)),
+                      gridcolor = 'lightgray',
+                      showgrid = TRUE,
+                      showline = FALSE,
+                      showticklabels = TRUE,
+                      ticks = '',
+                      nticks = 7)
+  ), 
+  align = 'center')
+```
+
+```{r}
+
+aqr_nationality <- artworks_single %>% 
+  filter(Nationality %in% c("American", "French", "German","British", "Spanish", "Italian", "Japanese","Swiss","Russian", "Dutch")) %>%
+  group_by(YearAcquired, Nationality) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup() %>%
+  spread(Nationality, Frequency)
+aqr_nationality$YearAcquired <- strtoi(aqr_nationality$YearAcquired)
+
+div(
+  plot_ly(aqr_nationality, x = ~YearAcquired) %>%
+  add_trace(y = ~American, name ='American', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~British, name ='British', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Dutch, name ='Dutch', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~French, name ='French', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~German, name ='German', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Italian, name ='Italian', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Japanese, name ='Japanese', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Russian, name ='Russian', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Spanish, name ='Spanish', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Swiss, name ='Swiss', type = 'scatter', mode = 'lines') %>%
+  layout(title = list(text = "Acquisition Year Analysis on Nationality Frequency Change", font = list(size = 16)),
+         xaxis = list(title = list(text = "Acquisition Year", font = list(size = 14)),
+                      showline = FALSE,
+                      showgrid = FALSE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "Frequency", font = list(size = 14)),
+                      gridcolor = 'lightgray',
+                      showgrid = TRUE,
+                      showline = FALSE,
+                      showticklabels = TRUE,
+                      ticks = '',
+                      nticks = 7)
+  ), 
+  align = 'center')
+```
+
+```{r}
+
+aqr_gender <- artworks_single %>%
+  filter(Gender %in% c("female", "male")) %>%
+  group_by(YearAcquired, Gender) %>%
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup() %>%
+  spread(Gender, Frequency)
+aqr_gender$YearAcquired <- strtoi(aqr_gender$YearAcquired)
+
+div(
+  plot_ly(aqr_gender, x = ~YearAcquired) %>%
+  add_trace(y = ~female, name ='Female', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~male, name ='Male', type = 'scatter', mode = 'lines') %>%
+  layout(title = list(text = "Acquisition Year Analysis on Gender Frequency Change", font = list(size = 16)),
+         xaxis = list(title = list(text = "Acquisition Year", font = list(size = 14)),
+                      showline = FALSE,
+                      showgrid = FALSE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "Count", font = list(size = 14)),
+                      gridcolor = 'lightgray',
+                      showgrid = TRUE,
+                      showline = FALSE,
+                      showticklabels = TRUE,
+                      ticks = '',
+                      nticks = 7),
+         legend = list(x = 0.75, 
+                       y = 0.9, 
+                       orientation = 'h')
+  ), 
+  align = 'center')
+```
+
+```{r}
+artworks_class <- artworks_single %>%
+  filter(Classification %in% c("Print", "Photograph", "Illustrated Book","Drawing","Design", "Architecture","Painting", "Video")) %>%
+  group_by(YearAcquired, Classification) %>%
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup %>%
+  arrange(Frequency) %>%
+  spread(Classification, Frequency)
+artworks_class$YearAcquired <- strtoi(artworks_class$YearAcquired)
+
+div(
+  plot_ly(artworks_class, x = ~YearAcquired) %>%
+  add_trace(y = ~Print, name ='Print', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Photograph, name ='Photograph', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~`Illustrated Book`, name ='Illustrated Book', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Drawing, name ='Drawing', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Design, name ='Design', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Architecture, name ='Architecture', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Painting, name ='Painting', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Video, name ='Video', type = 'scatter', mode = 'lines') %>%
+  layout(title = list(text = "Acquisition Year Analysis on Classification Frequency Change", font = list(size = 16)),
+         xaxis = list(title = list(text = "Acquisition Year", font = list(size = 14)),
+                      showline = FALSE,
+                      showgrid = FALSE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "Count", font = list(size = 14)),
+                      gridcolor = 'lightgray',
+                      showgrid = TRUE,
+                      showline = FALSE,
+                      showticklabels = TRUE,
+                      ticks = '',
+                      nticks = 7)
+  ), 
+  align = 'center')
+```
+
+```{r}
+artworks_med <- artworks_single %>% 
+  filter(Medium %in% c("Gelatin silver print", "Lithograph", "Albumen silver print","Pencil on paper","Letterpress", "Etching","Chromogenic color print", "Lithograph, printed in color")) %>%
+  group_by(YearAcquired, Medium) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup() %>%
+  spread(Medium, Frequency)
+artworks_med$YearAcquired <- strtoi(artworks_med$YearAcquired)
+
+div(
+  plot_ly(artworks_med, x = ~YearAcquired) %>%
+  add_trace(y = ~`Gelatin silver print`, name ='Gelatin silver print', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Lithograph, name ='Lithograph', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~`Albumen silver print`, name ='Albumen silver print', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~`Pencil on paper`, name ='Pencil on paper', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Letterpress, name ='Letterpress', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~Etching, name ='Etching', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~`Chromogenic color print`, name ='Chromogenic color print', type = 'scatter', mode = 'lines') %>%
+  add_trace(y = ~`Lithograph, printed in color`, name ='Lithograph, printed in color', type = 'scatter', mode = 'lines') %>%
+  layout(title = list(text = "Acquisition Year Analysis on Medium Frequency Change", font = list(size = 16)),
+         xaxis = list(title = list(text = "Acquisition Year", font = list(size = 14)),
+                      showline = FALSE,
+                      showgrid = FALSE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "Count", font = list(size = 14)),
+                      gridcolor = 'lightgray',
+                      showgrid = TRUE,
+                      showline = FALSE,
+                      showticklabels = TRUE,
+                      ticks = '',
+                      nticks = 7)
+  ), 
+  align = 'center')
+```
+
+### B. Nationalities of Most Contributing Artists
+
+```{r warning=FALSE}
+artworks_org <- artworks_single[3] %>% 
+  group_by(Nationality) %>% 
+  dplyr::summarise(Frequency = dplyr::n()) %>%
+  ungroup() %>%
+  arrange(Frequency)
+
+div(
+  plot_ly(tail(artworks_org, 10), x = ~Frequency, y = ~fct_reorder(Nationality, Frequency), type = 'bar', orientation = 'h') %>%
+  layout(title = list(text = "MoMA Artworks are Mostly Contributed by", font = list(size = 16)),
+         xaxis = list(title = list(text = "Count", font = list(size = 14)),
+                      showgrid = TRUE,
+                      showline = FALSE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "Nationality", font = list(size = 14)),
+                      showgrid = FALSE,
+                      showline = TRUE,
+                      showticklabels = TRUE,
+                      ticks = '')
+  ), align = 'center')
+```
+
+```{r}
+artworks_gender <- artworks_single %>% 
+  filter(Nationality %in% c("American", "French", "German","British", "Spanish", "Italian", "Japanese","Swiss","Russian", "Dutch")) %>%
+  group_by(Gender, Nationality) %>% 
+  dplyr::summarize(Frequency= dplyr::n()) %>% 
+  ungroup() %>%
+  arrange(Frequency)
+
+artworks_gender_plot <- artworks_gender %>% 
+  filter(Gender %in% c("female", "male")) %>%
+  spread(Gender, Frequency)
+
+div(
+  plot_ly(artworks_gender_plot, x = ~male, y = ~fct_reorder(Nationality, male+female), type = 'bar', orientation = 'h', name = 'male', marker = list(color = '#2678B2',
+                      line = list(color = '#2678B2',
+                                  width = 1))) %>%
+    add_trace(x = ~female, name = 'female',
+            marker = list(color = '#3ba9f7',
+                          line = list(color = '#3ba9f7',
+                                      width = 1))) %>%
+  layout(barmode = 'stack',
+         title = list(text = "MoMA Artworks Ten Most Frequent Nationalities", font = list(size = 16)),
+         xaxis = list(title = list(text = "Count", font = list(size = 14)),
+                      showgrid = TRUE,
+                      showline = FALSE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         yaxis = list(title = list(text = "Nationality", font = list(size = 14)),
+                      showgrid = FALSE,
+                      showline = TRUE,
+                      showticklabels = TRUE,
+                      ticks = ''),
+         legend = list(x = 0.8, 
+                       y = 0, 
+                       orientation = 'v')
+  ), align = 'center')
+```
+
+Secondly, we created an interactive bar chart using D3. This is intended as a quiz to engage the readers with our thought puzzle regarding the underlying missing pattern and perhaps the difficulty to collect those info for the museum. This D3 product is also presented in the missing value section, due to the high relevancy.
+
+<iframe src="quiz-moma.html" width="800" height="740" frameBorder="0" style="display:block;margin: auto;"></iframe> 
+
+# VII. Conclusion
+
+First of all, this was truly a rewarding experience to work with the MoMA datasets. We uncovered many interesting findings that challenge our intuitions and areas waiting to be explored further. For example, we were really surprised to see the overwhelming number of American artits in MoMA. We didn't expect MoMA to have such a concentrated number of American Artists. We thought as a truly modern and well-known museum, it should have a wider range of artists groups and more evenly distributed. In addition, we were also surprised to see that MoMA does seem to have a preference over a particular range of birth years- the 1940s, or at least, the artists born in those years were more "creative" or more "MoMA-preferred" that got them selected by MoMA. 
+
+With the artworks, we were surprised to see that Spanish artists, though underrepresented, are on the top 10 list of the most artworks contributed to MoMA. Besides, with the years of acquisition, we are pleased with our results, that uncover the peaks at year 1964, 1968, 1974 and 2008. Perhaps, our most rewarding finding is the age boxplots. Though the age boxplots have its own limitations, that we had to manually cut off the ages that we felt were not making sense (due to the limitation of the dataset), we were very very pleased to see that we were able to gather some results from it- especially the conclusion that making video would increase your likelihood to get selected by MoMA by 35. 
+
+If more time is permitted, we would love to work on areas such as the gender peak on the year acquisition time series graph and the types of mediums and classifications that MoMA interests in. Last but not the least, we would love to see if we could have a chance to involve other museums' datasets to cross compare results. This would allow us to really draw on useful conclusions that can decode the artworld and help people who have an interest in that specific realm. But again, as non-art-history students, but with big interest in the artworld, we are really pleased with our findings that really allowed us to study MoMA and its collections through the lens of data analysis and visualization.
