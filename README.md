@@ -1,1 +1,2 @@
-# Exploratary data visualization and analysis final project
+# EDAV final project
+This repository contains final project for exploratory data visualization and analysis, taught by Professor Joyce Robbins at Columbia University. We explored MoMA dataset and visualized the acquisition taste of MoMA.
