@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Quiz on MOMA! Can you guess it right?</title>
+    <script src="https://d3js.org/d3.v5.min.js"></script>
+  </head>
+
+	<body>
+
+		<div style="padding: 50px; float:left;">
+		</div>
+
+		<div id="chart" style="width: 600px; float:left;">
+			<h3>Quiz on MOMA! Can you guess it right?</h3>
+			<p>Context: While cleaning up our dataset, we found something interesting about the missing values. On the surface, the missing values can represent the difficulty for MOMA (or any museum in general) to collect the corresponding data- with more missing values indicating harder the difficulty. However, what if the museums simply do not care about that information when collecting/acquiring an artwork? Of course, there can be many possibilities and complexities behind this question. But with this quiz, we want to engage you in this thought puzzle and see if you have some intuition or answer for it!
+			<p>Question: is it more difficult to collect the year of creation for an artwork or the biography of any artist (such as birth year, death year, gender, and etc.)?</p>
+			<p>Hover over the bars to see the exact numbers.</p>
+
+			<form>
+				<button type = "button">Click to See the Answer!</button>
+			</form>	
+
+			<svg width = "600" height = "430">
+				<rect x = "0" y = "20" width = "600" height = "430" fill= "white"></rect>
+			</svg>
+
+		</div>
+		
+		<script type="text/javascript">
+
+			var w = 600;
+			var h = 400;
+			var svg = d3.select("svg")
+			var margin = {top: 25, right: 10, bottom: 25,
+			      left: 65};
+			var innerWidth = w - margin.left - margin.right;
+			var innerHeight = h - margin.top - margin.bottom;
+
+			var bardata = [1, 0, 0, 0, 0, 0, 0, 0]
+			    .map((value, key) => ({key, value})); 
+
+			//var bardata = [{"Death Year": 1, "Medium": 1, "Birth Year": 1, "Gender": 1, "Nationality": 1, "Year Acquired": 1, "Artist Name": 1, "Date": 1}]
+
+			var list = ["Death Year", "Medium", "Birth Year", "Gender", "Nationality", "Year Acquired", "Artist Name", "Date Made"]
+				.map((value, key) => ({key, value}));
+
+			console.log(list[2].value)
+
+
+			  var xScale = d3.scaleBand()
+			      .domain(["Death Year", "Medium", "Birth Year", "Gender", "Nationality", "Year Acquired", "Artist Name", "Date Made"])
+			      .range([0, innerWidth])
+			      .paddingInner(.1);
+
+			  //var scaledata = [48431, 11005, 9150, 8518, 7448, 6741, 5255, 3144]
+
+			  var yScale = d3.scaleLinear()
+			      .domain([0, 47924])
+			      .range([innerHeight, 0]);
+
+			  console.log(d3.max(bardata, d => 0))
+
+			  var xAxis = d3.axisBottom()
+			      .scale(xScale);
+
+			  var yAxis = d3.axisLeft()
+			      .scale(yScale);
+
+			  var bars = svg.append("g")
+			      .attr("id", "plot")
+			      .attr("transform", `translate (${margin.left}, ${margin.top})`)
+			    .selectAll("rect")
+			      .data(bardata, d => d.key);               
+
+			  bars.enter().append("rect")
+			      .attr("class", "bar")
+			      .attr("x", (d,i) => xScale(list[i].value))
+			      .attr("y", d => yScale(d.value))  
+			      .attr("width", xScale.bandwidth())
+			      .attr("height", d => innerHeight - yScale(d.value))
+			      .attr("fill","blue")
+			      .on('mouseenter', function(d,i){
+			      	d3.select(this).transition(300).attr('opacity', 0.7)
+			      	//svg.append("text").attr("id","reason").text("Possible Reason: Artists are still alive").attr("x", 330).attr("y", 35)
+			      	var key = d.key
+			      	var value = d.value
+			      	var total = 99692
+			      	var percent = +(value/99692)*100
+			      	svg.append("text").attr("id","value").attr("x", xScale(list[key].value)+75).attr("y", yScale(value) + 44).attr("fill","white").text(value)
+			      	console.log(d.key)
+			      	console.log(d.value)
+			      })
+			      .on('mouseleave', function(){
+			      	d3.select(this).transition(300).attr('opacity',1)
+			      	d3.select("text#value").remove()
+			      });
+
+			  svg.append("g")
+			      .attr("class", "xAxis")
+			      .attr("transform", `translate (${margin.left}, ${h - margin.bottom})`)
+			      .call(xAxis)
+			     //.selectAll("text")
+			     	//.attr("transform", "rotate(-15)");
+
+			  svg.append("g")
+			      .attr("class", "yAxis")
+			      .attr("transform", `translate (${margin.left}, ${margin.top})`)
+			      .call(yAxis);
+
+
+			  svg.append("text").text("Selected Columns of the Dataset")
+			  		.attr("x", w/2 + 20).attr("y", 412).attr("text-anchor","middle").style("font-size", "15px")
+
+			  svg.append("text").text("Frequency of NAs").attr("x",-230).attr("y",10).attr("text-anchor","start").attr("transform", "rotate(-90)").style("font-size", "15px")
+
+			  //attr("text-anchor","start").
+
+
+			 	/*svg2.append("text").text("Frequency of Penalties Per Game")
+				.attr("x",width/2).attr("y",-15).attr("text-anchor", "middle").style("font-size", "30px")
+				*/
+
+		    d3.select("button").on("click",function(){
+
+		    	var data = [47924, 10448, 8979, 7836, 7096, 6175, 5071, 2748]
+		    		.map((value, key) => ({key,value}));
+
+		    	yScale.domain([0, d3.max(data, d => d.value)])
+
+		    	svg.select(".yAxis").call(yAxis)
+
+		    	console.log(data)
+		    	console.log(xScale("Birth Year"))
+		    	console.log(xScale.bandwidth())
+
+		    	d3.select("g").selectAll("rect").data(data, d=>d.key)
+		    		.transition().duration(1000).attr("x", (d,i) => xScale(list[i].value)).attr("y", d=> yScale(d.value)).attr("height", d => innerHeight - yScale(d.value))
+		    		.attr("fill", "steelblue")
+
+		    	//d3.select("g").selectAll("text").data(data).enter().append("text").attr("x", (d,i)=> xScale(list[i].value)+12).attr("y", d => yScale(d.value) + 18).attr("fill","white").text(function(d,i){return d.value})
+
+		    	console.log(d3.select("g").selectAll("text"))
+
+		    	})
+
+
+			
+			
+
+
+			
+			
+
+
+			
+
+
+		</script>
+
+	</body>
+
+</html>
